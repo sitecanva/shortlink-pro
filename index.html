@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShortLink Pro - Acortador de Enlaces y Analítica</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for Detailed Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- QRCode.js for generating QR codes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.4);
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.7);
+        }
+    </style>
+</head>
+<body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col custom-scrollbar">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Brand -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <i class="fa-solid fa-link text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                            ShortLink<span class="text-indigo-400">Pro</span>
+                        </span>
+                        <span class="hidden sm:inline-block ml-2 px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+                            GitHub Hosted
+                        </span>
+                    </div>
+                </div>
+
+                <!-- User Profile & Action Bar -->
+                <div id="authContainer" class="flex items-center space-x-4">
+                    <!-- Dynamic state: Auth vs Unauth -->
+                    <button id="btnLoginGoogle" onclick="app.loginWithGoogle()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-medium border border-slate-700 transition duration-150 shadow-sm">
+                        <i class="fa-brands fa-google text-red-400"></i>
+                        <span>Iniciar Sesión con Gmail</span>
+                    </button>
+                    
+                    <div id="userInfo" class="hidden flex items-center space-x-3">
+                        <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                            <img id="userAvatar" src="" alt="Avatar" class="w-8 h-8 rounded-full border border-indigo-400/50">
+                            <div class="text-left hidden md:block">
+                                <p id="userName" class="text-xs font-semibold text-slate-200 leading-none">Usuario</p>
+                                <p id="userRoleBadge" class="text-[10px] text-indigo-400 leading-tight">Admin</p>
+                            </div>
+                        </div>
+
+                        <!-- Invite Link Modal Trigger -->
+                        <button onclick="app.openInviteModal()" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl transition" title="Compartir invitación con permisos">
+                            <i class="fa-solid fa-user-plus text-lg"></i>
+                        </button>
+
+                        <button onclick="app.logout()" class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-xl transition" title="Cerrar Sesión">
+                            <i class="fa-solid fa-right-from-bracket text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Top Banner / Quota Indicator & New Link Button -->
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 relative z-10">
+                <div>
+                    <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+                        Panel Central de Administración y Monitoreo
+                        <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Activo</span>
+                    </h1>
+                    <p class="text-sm text-slate-400 mt-1">Gestiona tus enlaces acortados, analiza métricas de conversión en tiempo real e integra píxeles de seguimiento.</p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
+                    <!-- Limit Counter Badge -->
+                    <div class="bg-slate-800/90 border border-slate-700/80 px-4 py-2 rounded-xl flex items-center space-x-3">
+                        <div class="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
+                            <i class="fa-solid fa-chart-line text-lg"></i>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block">Límite mensual</span>
+                            <span class="text-sm font-semibold text-indigo-300" id="quotaText">Puedes crear 250 enlaces más este mes</span>
+                        </div>
+                    </div>
+
+                    <!-- Cut / Shorten Button -->
+                    <button onclick="app.openShortenModal()" class="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition duration-200">
+                        <i class="fa-solid fa-plus-circle"></i>
+                        <span>Cortar Enlace</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 1: Filters & Search Engine -->
+        <section class="glass-panel rounded-2xl p-5 shadow-lg border border-slate-800 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h2 class="text-md font-semibold text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-filter text-indigo-400"></i>
+                    1. Filtros y Búsqueda de Enlaces
+                </h2>
+                <button onclick="app.resetFilters()" class="text-xs text-slate-400 hover:text-indigo-400 transition flex items-center gap-1">
+                    <i class="fa-solid fa-rotate-right"></i> Limpiar Filtros
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Buscar por Alias / Título -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Buscar por alias o título</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-500 text-sm"></i>
+                        <input type="text" id="filterSearch" oninput="app.applyFilters()" placeholder="Ej. promo-verano" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Ingrese etiquetas -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Ingrese etiquetas (tags)</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-tags absolute left-3 top-3 text-slate-500 text-sm"></i>
+                        <input type="text" id="filterTag" oninput="app.applyFilters()" placeholder="Ej. marketing, oferta" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Rango de fechas (Desde / Hasta) -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Fecha de creación (Desde - Hasta)</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="date" id="filterDateFrom" onchange="app.applyFilters()" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <input type="date" id="filterDateTo" onchange="app.applyFilters()" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Ordenamiento -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Ordenamiento</label>
+                    <select id="filterSort" onchange="app.applyFilters()" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <option value="created_desc">Fecha de creación (Reciente → Antiguo)</option>
+                        <option value="created_asc">Fecha de creación (Antiguo → Reciente)</option>
+                        <option value="clicks_desc">Volumen de Clics (Mayor → Menor)</option>
+                        <option value="clicks_asc">Volumen de Clics (Menor → Mayor)</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2 & 3: Metrics, Links List Table & Actions -->
+        <section class="glass-panel rounded-2xl shadow-xl border border-slate-800 overflow-hidden">
+            <!-- Header section of table -->
+            <div class="p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20 text-indigo-400">
+                        <i class="fa-solid fa-list-check text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white">2. Métricas y Datos del Listado</h3>
+                        <p class="text-xs text-slate-400">Visualización central de parámetros técnicos, grupos y estado de transiciones.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <span class="text-sm text-slate-300 font-semibold bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
+                        Total de enlaces: <span id="totalLinksCount" class="text-indigo-400">0</span>
+                    </span>
+                    <button onclick="app.openShortenModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1">
+                        <i class="fa-solid fa-scissors"></i> Botón Cortar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Links Table -->
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-900/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                            <th class="py-3.5 px-4 font-semibold">URL (Título / Corto / Destino)</th>
+                            <th class="py-3.5 px-3 font-semibold text-center">Transiciones</th>
+                            <th class="py-3.5 px-3 font-semibold">Fecha Creación</th>
+                            <th class="py-3.5 px-3 font-semibold">Desactivación</th>
+                            <th class="py-3.5 px-3 font-semibold">Grupo</th>
+                            <th class="py-3.5 px-3 font-semibold text-center">Visibilidad</th>
+                            <th class="py-3.5 px-3 font-semibold text-center">Contraseña</th>
+                            <th class="py-3.5 px-4 font-semibold text-right">3. Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linksTableBody" class="divide-y divide-slate-800/60 text-sm">
+                        <!-- Dynamic Link Rows Rendered Here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State Placeholder -->
+            <div id="emptyState" class="hidden py-12 text-center">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-500">
+                    <i class="fa-solid fa-link-slash text-2xl"></i>
+                </div>
+                <h4 class="text-slate-300 font-medium">No se encontraron enlaces</h4>
+                <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">No hay registros que coincidan con los filtros o tu lista está vacía. ¡Crea un nuevo enlace acortado!</p>
+                <button onclick="app.openShortenModal()" class="mt-4 inline-flex items-center gap-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition font-medium">
+                    <i class="fa-solid fa-plus"></i> Crear mi primer enlace
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>ShortLink Pro App &copy; 2026 - Código alojado en GitHub Pages</span>
+            <div class="flex items-center space-x-4">
+                <span class="hover:text-slate-400 cursor-pointer" onclick="app.showDocsModal()"><i class="fa-brands fa-github mr-1"></i> Docs Repositorio</span>
+                <span class="hover:text-slate-400 cursor-pointer" onclick="app.showAndroidModal()"><i class="fa-brands fa-android mr-1"></i> App Android Studio</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- MODAL: Acortar Enlace (Módulo Crear / Editar Enlace) -->
+    <div id="shortenModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto custom-scrollbar">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden my-8 transform transition-all">
+            <!-- Modal Header -->
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                        <i class="fa-solid fa-scissors text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 id="modalTitle" class="text-base font-bold text-white">Módulo Acortar Enlace</h3>
+                        <p class="text-xs text-slate-400">Configura todos los campos técnicos de tu URL reducida</p>
+                    </div>
+                </div>
+                <button onclick="app.closeShortenModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Form Body -->
+            <form id="linkForm" onsubmit="app.saveLink(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editLinkId" value="">
+
+                <!-- Enlace Largo & Limit Banner -->
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-semibold text-slate-300">Enlace largo <span class="text-red-400">*</span></label>
+                        <span class="text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            Puedes crear <span id="modalQuotaCount">250</span> enlaces más este mes
+                        </span>
+                    </div>
+                    <input type="url" id="fieldOriginalUrl" required placeholder="https://mi-sitio-web-largo.com/campana/pagina?ref=123" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <!-- Título Interno & Dominio -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Título de referencia interno</label>
+                        <input type="text" id="fieldTitle" placeholder="Ej. Lanzamiento Oferta Verano" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Dominio base</label>
+                        <select id="fieldDomain" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <option value="goo.su">goo.su (Predeterminado)</option>
+                            <option value="link.pro">link.pro (Dominio Premium)</option>
+                            <option value="short.io">short.io (Personalizado)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Alias (Slug) & Intimidad -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Alias / Sufijo personalizado (Slug)</label>
+                        <div class="flex items-center">
+                            <span class="bg-slate-800 text-slate-400 text-xs px-2.5 py-2 rounded-l-xl border border-r-0 border-slate-800">/</span>
+                            <input type="text" id="fieldAlias" placeholder="oferta-2026" class="w-full bg-slate-950 border border-slate-800 rounded-r-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Intimidad / Visibilidad</label>
+                        <select id="fieldPrivacy" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <option value="public">Público e indexable</option>
+                            <option value="private">Privado (Acceso solo con directo)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Grupo & Etiquetas -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Grupo / Carpeta interna</label>
+                        <input type="text" id="fieldGroup" placeholder="Ej. Campañas Meta" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Etiquetas (Separadas por comas)</label>
+                        <input type="text" id="fieldTags" placeholder="facebook, promo, descuento" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Contraseña & Fecha de Desactivación -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña de acceso (Opcional)</label>
+                        <input type="password" id="fieldPassword" placeholder="Dejar en blanco si no requiere" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Fecha de desactivación (Expiración)</label>
+                        <input type="datetime-local" id="fieldExpiration" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Píxeles de Seguimiento -->
+                <div class="border-t border-slate-800 pt-3">
+                    <label class="block text-xs font-semibold text-indigo-400 mb-2 flex items-center gap-1">
+                        <i class="fa-solid fa-bullseye"></i> Píxeles de Seguimiento (Analítica y Retargeting)
+                    </label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input type="text" id="fieldPixelFb" placeholder="ID Facebook Pixel (ej. 123456789)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <input type="text" id="fieldPixelGoogle" placeholder="ID Google Ads / GA4 (ej. AW-12345)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="app.closeShortenModal()" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-6 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/30 transition">
+                        Guardar y Generar Enlace
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Estadísticas Detalladas -->
+    <div id="statsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto custom-scrollbar">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-8">
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                        <i class="fa-solid fa-chart-pie text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 id="statsModalTitle" class="text-base font-bold text-white">Estadísticas Detalladas de Rendimiento</h3>
+                        <p id="statsModalSubtitle" class="text-xs text-slate-400">Analítica de tráfico, dispositivos y origen geográfico</p>
+                    </div>
+                </div>
+                <button onclick="app.closeStatsModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <!-- Top Summary Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
+                        <span class="text-xs text-slate-400 block">Total Transiciones</span>
+                        <span id="statTotalClicks" class="text-2xl font-bold text-indigo-400">0</span>
+                    </div>
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
+                        <span class="text-xs text-slate-400 block">Top Dispositivo</span>
+                        <span id="statTopDevice" class="text-base font-semibold text-slate-200 mt-1 block">Móvil</span>
+                    </div>
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
+                        <span class="text-xs text-slate-400 block">Top País</span>
+                        <span id="statTopCountry" class="text-base font-semibold text-slate-200 mt-1 block">España / México</span>
+                    </div>
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
+                        <span class="text-xs text-slate-400 block">Hora Pico</span>
+                        <span id="statPeakHour" class="text-base font-semibold text-slate-200 mt-1 block">18:00 - 20:00</span>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-mobile-screen text-indigo-400"></i> Dispositivos de Acceso
+                        </h4>
+                        <div class="h-48 relative">
+                            <canvas id="devicesChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-compass text-indigo-400"></i> Navegadores Principales
+                        </h4>
+                        <div class="h-48 relative">
+                            <canvas id="browsersChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Moments of Traffic Chart -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <h4 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-clock text-indigo-400"></i> Momentos y Horarios de Tráfico (Últimos 7 Días)
+                    </h4>
+                    <div class="h-56 relative">
+                        <canvas id="trafficTimelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Compartir / QR Code & Invitation Link Modal -->
+    <div id="shareModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 text-center space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-share-nodes text-indigo-400"></i> Compartir / Redirección
+                </h3>
+                <button onclick="app.closeShareModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400">Escanea el código QR o copia el enlace de difusión directa</p>
+            
+            <div class="flex justify-center bg-white p-4 rounded-xl max-w-[200px] mx-auto shadow-inner">
+                <div id="qrcodeContainer"></div>
+            </div>
+
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                <span id="shareUrlText" class="text-xs font-mono text-indigo-300 truncate mr-2">https://goo.su/alias</span>
+                <button onclick="app.copyShareUrl()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition">
+                    Copiar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Invitaciones y Permisos Gmail -->
+    <div id="inviteModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus text-indigo-400"></i> Enlace de Invitación a Colaboradores
+                </h3>
+                <button onclick="app.closeInviteModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400">Genera un enlace de invitación para invitar a otros usuarios con autenticación Gmail y otorgar permisos.</p>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Asignar Nivel de Permisos</label>
+                <select id="inviteRoleSelect" onchange="app.generateInviteLink()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200">
+                    <option value="editor">Editor (Puede crear, editar y eliminar enlaces)</option>
+                    <option value="viewer">Solo Lector (Solo puede ver enlaces y analítica)</option>
+                </select>
+            </div>
+
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                <input type="text" id="inviteGeneratedLink" readonly class="w-full bg-transparent text-xs font-mono text-indigo-300 focus:outline-none mr-2">
+                <button onclick="app.copyInviteLink()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition shrink-0">
+                    Copiar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Password Prompt for Protected Links -->
+    <div id="passwordProtectedModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 space-y-4 text-center">
+            <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto">
+                <i class="fa-solid fa-lock text-xl"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">Enlace Protegido</h3>
+            <p class="text-xs text-slate-400">Esta URL requiere clave de acceso previa a la redirección.</p>
+            
+            <input type="password" id="protectedInputPass" placeholder="Ingresa la contraseña" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-center text-white focus:border-amber-500 focus:outline-none">
+
+            <div class="flex items-center space-x-2">
+                <button onclick="app.cancelPasswordVerification()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 rounded-xl transition">Cancelar</button>
+                <button onclick="app.verifyPasswordAndRedirect()" class="w-1/2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs py-2 rounded-xl transition">Acceder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Element -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 pointer-events-none">
+        <div id="toastIcon" class="text-indigo-400"><i class="fa-solid fa-circle-info"></i></div>
+        <div id="toastMessage" class="text-xs font-medium">Notificación</div>
+    </div>
+
+    <!-- App JavaScript file -->
+    <script src="js/app.js"></script>
+</body>
+</html>

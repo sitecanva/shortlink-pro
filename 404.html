@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redireccionando... | ShortLink Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="h-full flex items-center justify-center p-4 font-sans bg-slate-950 text-slate-100">
+    <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-4 shadow-2xl">
+        <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto animate-bounce">
+            <i class="fa-solid fa-link text-2xl"></i>
+        </div>
+        <h2 class="text-xl font-bold text-white">Procesando Redirección</h2>
+        <p id="redirectStatus" class="text-sm text-slate-400">Verificando enlace acortado y parámetros de seguridad...</p>
+
+        <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-indigo-500 h-1.5 rounded-full animate-pulse w-3/4"></div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Path extraction for GitHub Pages SPA / Slug routing
+            const path = window.location.pathname;
+            const segments = path.split('/').filter(Boolean);
+            
+            // Extract slug (last segment of path)
+            const slug = segments.length > 0 ? segments[segments.length - 1] : '';
+
+            if (slug && slug !== 'index.html') {
+                // Store target slug in sessionStorage & redirect to main app index
+                sessionStorage.setItem('targetSlug', slug);
+                const repoPath = segments.length > 1 ? '/' + segments[0] + '/' : '/';
+                window.location.replace(window.location.origin + repoPath + 'index.html?redirect=' + encodeURIComponent(slug));
+            } else {
+                window.location.replace('/index.html');
+            }
+        })();
+    </script>
+</body>
+</html>
