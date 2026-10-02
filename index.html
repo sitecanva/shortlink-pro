@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShortLink Pro - Acortador de Enlaces y Analítica</title>
+    <title>ShortLink Pro - Acortador de Enlaces y Analítica Segura</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -55,7 +55,86 @@
 </head>
 <body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col custom-scrollbar">
 
-    <!-- Top Navigation Bar -->
+    <!-- ================= 1. PANTALLA SEGURA DE INICIO DE SESIÓN (LOGIN GATE) ================= -->
+    <div id="loginGateScreen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4 overflow-y-auto custom-scrollbar">
+        <div class="max-w-md w-full space-y-6">
+            <!-- Brand Logo & Header -->
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-indigo-400 flex items-center justify-center mx-auto shadow-2xl shadow-indigo-500/40">
+                    <i class="fa-solid fa-shield-halved text-white text-3xl"></i>
+                </div>
+                <h1 class="text-2xl font-extrabold text-white tracking-tight">
+                    ShortLink <span class="text-indigo-400">Pro</span>
+                </h1>
+                <p class="text-xs text-slate-400">Portal de Acceso Protegido por Contraseña y Roles Ciberseguros</p>
+            </div>
+
+            <!-- Login Card -->
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5">
+                <form id="loginForm" onsubmit="app.handleLogin(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Correo electrónico o Usuario</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-envelope absolute left-3 top-3 text-slate-500 text-sm"></i>
+                            <input type="text" id="loginUsername" required placeholder="admin@shortlink.pro" class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña de acceso</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-key absolute left-3 top-3 text-slate-500 text-sm"></i>
+                            <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <button type="button" onclick="app.togglePasswordVisibility('loginPassword')" class="absolute right-3 top-3 text-slate-500 hover:text-slate-300 text-sm">
+                                <i class="fa-solid fa-eye" id="loginPasswordEye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Brute Force Lockout Status Alert -->
+                    <div id="lockoutAlert" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-base shrink-0"></i>
+                        <span id="lockoutMessage">Cuenta bloqueada temporalmente por intentos fallidos.</span>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition duration-150 flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-lock text-sm"></i>
+                        <span>Ingresar al Sistema</span>
+                    </button>
+                </form>
+
+                <!-- Cybersecurity Badge Info -->
+                <div class="border-t border-slate-800 pt-4 text-[11px] text-slate-400 space-y-2">
+                    <div class="flex items-center gap-2 text-emerald-400 font-semibold">
+                        <i class="fa-solid fa-circle-check"></i> Criterios de Ciberseguridad Activos:
+                    </div>
+                    <ul class="grid grid-cols-1 gap-1 text-slate-400 pl-4 list-disc">
+                        <li>Cifrado Hash de contraseñas con SHA-256 + Salt</li>
+                        <li>Control Anti Fuerza Bruta (Bloqueo tras 5 intentos fallidos)</li>
+                        <li>Control de Acceso basado en Perfiles (RBAC) y Revocación Instantánea</li>
+                    </ul>
+                </div>
+
+                <!-- Quick Demo Login Presets -->
+                <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block text-center">Cuentas Demostrativas de Prueba:</span>
+                    <div class="grid grid-cols-3 gap-1.5 text-[11px]">
+                        <button type="button" onclick="app.fillDemoLogin('admin@shortlink.pro', 'Admin123!')" class="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 py-1.5 px-2 rounded-lg border border-indigo-500/30 truncate text-center font-medium">
+                            👑 Admin
+                        </button>
+                        <button type="button" onclick="app.fillDemoLogin('editor@shortlink.pro', 'Editor123!')" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 py-1.5 px-2 rounded-lg border border-amber-500/30 truncate text-center font-medium">
+                            ✏️ Editor
+                        </button>
+                        <button type="button" onclick="app.fillDemoLogin('lector@shortlink.pro', 'Lector123!')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded-lg border border-slate-700 truncate text-center font-medium">
+                            👁️ Lector
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Navigation Bar (Visible only when logged in) -->
     <header class="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
@@ -69,34 +148,35 @@
                             ShortLink<span class="text-indigo-400">Pro</span>
                         </span>
                         <span class="hidden sm:inline-block ml-2 px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
-                            GitHub Hosted
+                            Protegido SHA-256
                         </span>
                     </div>
                 </div>
 
                 <!-- User Profile & Action Bar -->
-                <div id="authContainer" class="flex items-center space-x-4">
-                    <!-- Dynamic state: Auth vs Unauth -->
-                    <button id="btnLoginGoogle" onclick="app.loginWithGoogle()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-medium border border-slate-700 transition duration-150 shadow-sm">
-                        <i class="fa-brands fa-google text-red-400"></i>
-                        <span>Iniciar Sesión con Gmail</span>
-                    </button>
-                    
-                    <div id="userInfo" class="hidden flex items-center space-x-3">
+                <div id="authContainer" class="flex items-center space-x-3">
+                    <div id="userInfo" class="flex items-center space-x-3">
+                        <!-- User Role & Name Badge -->
                         <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
                             <img id="userAvatar" src="" alt="Avatar" class="w-8 h-8 rounded-full border border-indigo-400/50">
                             <div class="text-left hidden md:block">
                                 <p id="userName" class="text-xs font-semibold text-slate-200 leading-none">Usuario</p>
-                                <p id="userRoleBadge" class="text-[10px] text-indigo-400 leading-tight">Admin</p>
+                                <p id="userRoleBadge" class="text-[10px] text-indigo-400 font-bold leading-tight">Admin</p>
                             </div>
                         </div>
 
+                        <!-- NEW: User Management Trigger Button (Visible only to Admin) -->
+                        <button id="btnManageUsers" onclick="app.openUserManagementModal()" class="hidden flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition" title="Gestión de Usuarios, Perfiles y Revocaciones (Solo Admin)">
+                            <i class="fa-solid fa-users-gear text-sm"></i>
+                            <span class="hidden sm:inline">Usuarios & Permisos</span>
+                        </button>
+
                         <!-- Invite Link Modal Trigger -->
-                        <button onclick="app.openInviteModal()" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl transition" title="Compartir invitación con permisos">
+                        <button onclick="app.openInviteModal()" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl transition" title="Compartir invitación a colaboradores">
                             <i class="fa-solid fa-user-plus text-lg"></i>
                         </button>
 
-                        <button onclick="app.logout()" class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-xl transition" title="Cerrar Sesión">
+                        <button onclick="app.logout()" class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-xl transition" title="Cerrar Sesión Segura">
                             <i class="fa-solid fa-right-from-bracket text-lg"></i>
                         </button>
                     </div>
@@ -105,7 +185,7 @@
         </div>
     </header>
 
-    <!-- Main Container -->
+    <!-- Main Dashboard Container -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         <!-- Top Banner / Quota Indicator & New Link Button -->
@@ -134,7 +214,7 @@
                     </div>
 
                     <!-- Cut / Shorten Button -->
-                    <button onclick="app.openShortenModal()" class="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition duration-200">
+                    <button id="btnOpenShortenModal" onclick="app.openShortenModal()" class="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition duration-200">
                         <i class="fa-solid fa-plus-circle"></i>
                         <span>Cortar Enlace</span>
                     </button>
@@ -277,10 +357,117 @@
 
     <!-- ================= MODALS ================= -->
 
-    <!-- MODAL: Acortar Enlace (Módulo Crear / Editar Enlace) -->
+    <!-- NEW MODAL: GESTIÓN DE USUARIOS, PERFILES Y REVOCACIÓN DE ACCESO -->
+    <div id="userManagementModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm hidden flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto transform transition-all">
+            
+            <!-- Modal Header -->
+            <div class="bg-slate-800/90 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                        <i class="fa-solid fa-users-gear text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Gestión de Usuarios, Perfiles y Revocación</h3>
+                        <p class="text-xs text-slate-400">Control Ciberseguro de Accesos RBAC y Administración de Credenciales</p>
+                    </div>
+                </div>
+                <button onclick="app.closeUserManagementModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content Body -->
+            <div class="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
+
+                <!-- Formulario: Crear Nuevo Usuario con Contraseña Cifrada -->
+                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
+                    <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-user-plus"></i> Crear Nuevo Usuario con Contraseña Segura
+                    </h4>
+
+                    <form id="newUserForm" onsubmit="app.createUser(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
+                                <input type="text" id="newUserName" required placeholder="Ej. Maria Pérez" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Correo / Usuario</label>
+                                <input type="email" id="newUserEmail" required placeholder="maria@empresa.com" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Perfil / Rol de Acceso</label>
+                                <select id="newUserRole" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                                    <option value="admin">Administrador (Crear, Editar, Revocar)</option>
+                                    <option value="editor">Editor (Crear y Editar enlaces)</option>
+                                    <option value="viewer">Solo Lector (Solo Lectura y Estadísticas)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña Inicial (Mín. 8 caract., Mayús., Mínus., Núm. y Especial)</label>
+                            <div class="relative">
+                                <input type="password" id="newUserPassword" required oninput="app.checkPasswordStrength(this.value)" placeholder="••••••••" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                                <button type="button" onclick="app.togglePasswordVisibility('newUserPassword')" class="absolute right-3 top-2.5 text-slate-500 text-xs">
+                                    <i class="fa-solid fa-eye" id="newUserPasswordEye"></i>
+                                </button>
+                            </div>
+                            <!-- Strength Meter -->
+                            <div class="mt-2 flex items-center space-x-2">
+                                <div class="flex-1 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                    <div id="strengthBar" class="h-full bg-slate-700 w-0 transition-all"></div>
+                                </div>
+                                <span id="strengthText" class="text-[10px] text-slate-400 font-semibold">Fortaleza</span>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button type="submit" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-lg transition flex items-center gap-2">
+                                <i class="fa-solid fa-user-check"></i>
+                                <span>Registrar Usuario Cifrado</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tabla: Registro y Revocación de Usuarios -->
+                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-users"></i> Usuarios Registrados y Control de Revocación
+                        </h4>
+                        <span class="text-xs text-indigo-400 font-semibold bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                            Total Usuarios: <span id="totalUsersCount">0</span>
+                        </span>
+                    </div>
+
+                    <div class="overflow-x-auto custom-scrollbar border border-slate-800/80 rounded-xl">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-semibold">
+                                <tr>
+                                    <th class="py-3 px-3">Usuario / Correo</th>
+                                    <th class="py-3 px-3">Perfil / Rol</th>
+                                    <th class="py-3 px-3 text-center">Estado del Acceso</th>
+                                    <th class="py-3 px-3">Último Ingreso</th>
+                                    <th class="py-3 px-3 text-right">Acciones de Control</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody" class="divide-y divide-slate-800/50">
+                                <!-- Dynamic User Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Acortar Enlace -->
     <div id="shortenModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm hidden flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto transform transition-all">
-            <!-- Modal Header (Fixed at top) -->
             <div class="bg-slate-800/90 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between shrink-0">
                 <div class="flex items-center space-x-3">
                     <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
@@ -296,11 +483,9 @@
                 </button>
             </div>
 
-            <!-- Modal Form Body (Internal scroll) -->
             <form id="linkForm" onsubmit="app.saveLink(event)" class="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
                 <input type="hidden" id="editLinkId" value="">
 
-                <!-- Enlace Largo & Limit Banner -->
                 <div class="space-y-1">
                     <div class="flex items-center justify-between">
                         <label class="block text-xs font-semibold text-slate-300">Enlace largo <span class="text-red-400">*</span></label>
@@ -311,7 +496,6 @@
                     <input type="url" id="fieldOriginalUrl" required placeholder="https://mi-sitio-web-largo.com/campana/pagina?ref=123" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
                 </div>
 
-                <!-- Título Interno & Dominio Base -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 mb-1">Título de referencia interno</label>
@@ -332,7 +516,6 @@
                     </div>
                 </div>
 
-                <!-- Alias (Slug) & Intimidad -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 mb-1">Alias / Sufijo personalizado (Slug)</label>
@@ -350,7 +533,6 @@
                     </div>
                 </div>
 
-                <!-- Grupo & Etiquetas -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 mb-1">Grupo / Carpeta interna</label>
@@ -362,7 +544,6 @@
                     </div>
                 </div>
 
-                <!-- Contraseña & Fecha de Desactivación -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña de acceso (Opcional)</label>
@@ -374,7 +555,6 @@
                     </div>
                 </div>
 
-                <!-- Píxeles de Seguimiento -->
                 <div class="border-t border-slate-800 pt-3">
                     <label class="block text-xs font-semibold text-indigo-400 mb-2 flex items-center gap-1">
                         <i class="fa-solid fa-bullseye"></i> Píxeles de Seguimiento (Analítica y Retargeting)
@@ -385,7 +565,6 @@
                     </div>
                 </div>
 
-                <!-- Buttons -->
                 <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
                     <button type="button" onclick="app.closeShortenModal()" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition">
                         Cancelar
@@ -398,11 +577,10 @@
         </div>
     </div>
 
-    <!-- MODAL: Estadísticas Detalladas (Ajustado con Scroll Interno y Header Fijo) -->
+    <!-- MODAL: Estadísticas Detalladas -->
     <div id="statsModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm hidden flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto custom-scrollbar">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto transform transition-all">
             
-            <!-- Fixed Header -->
             <div class="bg-slate-800/90 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between shrink-0">
                 <div class="flex items-center space-x-3">
                     <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
@@ -418,9 +596,7 @@
                 </button>
             </div>
 
-            <!-- Scrollable Body Content -->
             <div class="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
-                <!-- Top Summary Cards & Total Clics -->
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
                         <span class="text-xs text-slate-400 block">Total Transiciones (Clics)</span>
@@ -440,7 +616,6 @@
                     </div>
                 </div>
 
-                <!-- Filtro de Fechas para Visualizar Clics -->
                 <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                         <h4 class="text-xs font-semibold text-slate-300 flex items-center gap-2">
@@ -467,7 +642,6 @@
                     </div>
                 </div>
 
-                <!-- Charts Grid -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
                         <h4 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
@@ -488,7 +662,6 @@
                     </div>
                 </div>
 
-                <!-- Timeline Chart -->
                 <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
                     <h4 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
                         <i class="fa-solid fa-clock text-indigo-400"></i> Distribución de Clics por Horas y Fechas
@@ -498,7 +671,6 @@
                     </div>
                 </div>
 
-                <!-- Tabla de Registro de Clics Reales -->
                 <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                     <h4 class="text-xs font-semibold text-slate-300 flex items-center gap-2">
                         <i class="fa-solid fa-list-ol text-indigo-400"></i> Registro de Transiciones / Clics Reales

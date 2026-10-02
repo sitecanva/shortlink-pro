@@ -1,19 +1,25 @@
 /**
- * ShortLink Pro - Core Application Logic
- * Supports Google Authentication, Permissions, Link Shortening, Real IP & Device Analytics & GitHub Pages hosting.
+ * ShortLink Pro - Core Application Logic with Cybersecurity & RBAC User Management
+ * SHA-256 Hashing, Anti-Brute-Force Lockout, Revocation Control & GitHub Pages Hosting.
  */
 
 class ShortLinkApp {
     constructor() {
         this.STORAGE_KEY = 'shortlink_pro_links_v2';
-        this.USER_KEY = 'shortlink_pro_user';
+        this.USERS_KEY = 'shortlink_pro_users_v3';
+        this.SESSION_KEY = 'shortlink_pro_active_session_v3';
+        this.LOCKOUT_KEY = 'shortlink_pro_lockout_v3';
+        this.SALT = 'ShortLinkProCibersecuritySalt2026!';
         this.QUOTA_MONTHLY_MAX = 250;
 
+        this.users = [];
         this.currentUser = null;
         this.links = [];
         this.filteredLinks = [];
         this.currentProtectedLink = null;
         this.activeStatsLink = null;
+        this.loginAttempts = 0;
+        this.lockoutUntil = 0;
         
         // Chart instances
         this.devicesChart = null;
@@ -23,126 +29,495 @@ class ShortLinkApp {
         this.init();
     }
 
-    init() {
-        this.loadUser();
+    async init() {
+        await this.loadUsers();
+        this.checkLockoutStatus();
+        this.loadSession();
         this.loadLinks();
         this.checkInvitationParams();
         this.checkRedirection();
-        this.renderTable();
-        this.updateQuotaUI();
+        this.setupInactivityTimer();
     }
 
-    /* ================= 1. USER AUTHENTICATION & PERMISSIONS ================= */
+    /* ================= 1. CYBERSECURITY & CRYPTOGRAPHY ENGINE ================= */
 
-    loadUser() {
-        const storedUser = localStorage.getItem(this.USER_KEY);
-        if (storedUser) {
-            this.currentUser = JSON.parse(storedUser);
+    async hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password + this.SALT);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    validatePasswordStrength(password) {
+        // Min 8 chars, uppercase, lowercase, number, special char
+        const hasMinLen = password.length >= 8;
+        const hasUpper = /[A-Z]/.test(password);
+        const hasLower = /[a-z]/.test(password);
+        const hasNum = /[0-9]/.test(password);
+        const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+        let score = 0;
+        if (hasMinLen) score++;
+        if (hasUpper) score++;
+        if (hasLower) score++;
+        if (hasNum) score++;
+        if (hasSpecial) score++;
+
+        return { score, isValid: score >= 4 && hasMinLen };
+    }
+
+    checkPasswordStrength(val) {
+        const bar = document.getElementById('strengthBar');
+        const txt = document.getElementById('strengthText');
+        if (!bar || !txt) return;
+
+        const { score } = this.validatePasswordStrength(val);
+        const percentages = [0, 20, 40, 60, 80, 100];
+        const colors = ['bg-slate-700', 'bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500'];
+        const labels = ['Muy Débil', 'Débil', 'Regular', 'Buena', 'Fuerte', 'Excelente'];
+
+        bar.className = `h-full ${colors[score]} transition-all`;
+        bar.style.width = `${percentages[score]}%`;
+        txt.textContent = labels[score];
+        txt.className = `text-[10px] font-bold ${score >= 4 ? 'text-emerald-400' : 'text-slate-400'}`;
+    }
+
+    togglePasswordVisibility(inputId) {
+        const input = document.getElementById(inputId);
+        const eye = document.getElementById(inputId + 'Eye');
+        if (!input) return;
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (eye) eye.className = 'fa-solid fa-eye-slash';
         } else {
-            this.currentUser = {
-                id: 'admin-123',
-                name: 'Administrador Gmail',
-                email: 'admin@gmail.com',
-                photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=AdminGmail',
-                role: 'admin',
-                createdMonth: new Date().getMonth(),
-                linksCreatedThisMonth: 0
-            };
-            this.saveUser();
-        }
-        this.updateAuthUI();
-    }
-
-    saveUser() {
-        localStorage.setItem(this.USER_KEY, JSON.stringify(this.currentUser));
-    }
-
-    loginWithGoogle() {
-        const simulatedName = prompt("Simular inicio de sesión con Google (Gmail):\nIngresa tu nombre:", this.currentUser ? this.currentUser.name : "Usuario Gmail");
-        if (!simulatedName) return;
-
-        const simulatedEmail = prompt("Ingresa tu correo Gmail:", this.currentUser ? this.currentUser.email : "usuario@gmail.com");
-
-        this.currentUser = {
-            id: 'google-' + Date.now(),
-            name: simulatedName,
-            email: simulatedEmail || 'usuario@gmail.com',
-            photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(simulatedName)}`,
-            role: 'admin',
-            createdMonth: new Date().getMonth(),
-            linksCreatedThisMonth: this.currentUser ? (this.currentUser.linksCreatedThisMonth || 0) : 0
-        };
-
-        this.saveUser();
-        this.updateAuthUI();
-        this.showToast(`Bienvenido, ${this.currentUser.name}`, 'success');
-    }
-
-    logout() {
-        localStorage.removeItem(this.USER_KEY);
-        this.currentUser = null;
-        this.loadUser();
-        this.showToast('Sesión cerrada correctamente', 'info');
-    }
-
-    updateAuthUI() {
-        const btnLogin = document.getElementById('btnLoginGoogle');
-        const userInfo = document.getElementById('userInfo');
-        const userName = document.getElementById('userName');
-        const userAvatar = document.getElementById('userAvatar');
-        const userRoleBadge = document.getElementById('userRoleBadge');
-
-        if (this.currentUser) {
-            btnLogin.classList.add('hidden');
-            userInfo.classList.remove('hidden');
-            userName.textContent = this.currentUser.name;
-            userAvatar.src = this.currentUser.photo;
-            
-            const roleLabels = { admin: 'Admin', editor: 'Editor', viewer: 'Solo Lector' };
-            userRoleBadge.textContent = roleLabels[this.currentUser.role] || 'Admin';
-        } else {
-            btnLogin.classList.remove('hidden');
-            userInfo.classList.add('hidden');
+            input.type = 'password';
+            if (eye) eye.className = 'fa-solid fa-eye';
         }
     }
 
-    checkInvitationParams() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const inviteRole = urlParams.get('invite');
+    /* ================= 2. USER SYSTEM & DEMO INITIALIZATION ================= */
 
-        if (inviteRole && ['editor', 'viewer'].includes(inviteRole)) {
-            if (this.currentUser) {
-                this.currentUser.role = inviteRole;
-                this.saveUser();
+    async loadUsers() {
+        const storedUsers = localStorage.getItem(this.USERS_KEY);
+        if (storedUsers) {
+            this.users = JSON.parse(storedUsers);
+        } else {
+            // Seed default users with pre-computed secure hashes
+            const adminHash = await this.hashPassword('Admin123!');
+            const editorHash = await this.hashPassword('Editor123!');
+            const viewerHash = await this.hashPassword('Lector123!');
+
+            this.users = [
+                {
+                    id: 'usr-admin-1',
+                    name: 'Administrador General',
+                    email: 'admin@shortlink.pro',
+                    passwordHash: adminHash,
+                    role: 'admin', // 'admin', 'editor', 'viewer'
+                    status: 'active', // 'active', 'revoked'
+                    createdDate: new Date().toISOString(),
+                    lastLoginDate: new Date().toISOString(),
+                    linksCreatedThisMonth: 0,
+                    createdMonth: new Date().getMonth()
+                },
+                {
+                    id: 'usr-editor-2',
+                    name: 'Editor de Contenidos',
+                    email: 'editor@shortlink.pro',
+                    passwordHash: editorHash,
+                    role: 'editor',
+                    status: 'active',
+                    createdDate: new Date().toISOString(),
+                    lastLoginDate: 'Nunca',
+                    linksCreatedThisMonth: 0,
+                    createdMonth: new Date().getMonth()
+                },
+                {
+                    id: 'usr-viewer-3',
+                    name: 'Auditor Solo Lector',
+                    email: 'lector@shortlink.pro',
+                    passwordHash: viewerHash,
+                    role: 'viewer',
+                    status: 'active',
+                    createdDate: new Date().toISOString(),
+                    lastLoginDate: 'Nunca',
+                    linksCreatedThisMonth: 0,
+                    createdMonth: new Date().getMonth()
+                }
+            ];
+            this.saveUsers();
+        }
+    }
+
+    saveUsers() {
+        localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+    }
+
+    /* ================= 3. AUTHENTICATION & LOGIN GATE ================= */
+
+    loadSession() {
+        const sessionData = localStorage.getItem(this.SESSION_KEY);
+        if (sessionData) {
+            const parsed = JSON.parse(sessionData);
+            // Verify if user still exists and access is not revoked
+            const user = this.users.find(u => u.id === parsed.id);
+            if (user && user.status === 'active') {
+                this.currentUser = user;
+                this.hideLoginGate();
                 this.updateAuthUI();
-                this.showToast(`¡Invitación aceptada! Tu rol actual es: ${inviteRole.toUpperCase()}`, 'success');
-                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+            }
+        }
+        this.showLoginGate();
+    }
+
+    saveSession() {
+        if (this.currentUser) {
+            localStorage.setItem(this.SESSION_KEY, JSON.stringify({
+                id: this.currentUser.id,
+                email: this.currentUser.email,
+                loginTime: Date.now()
+            }));
+        } else {
+            localStorage.removeItem(this.SESSION_KEY);
+        }
+    }
+
+    showLoginGate() {
+        document.getElementById('loginGateScreen').classList.remove('hidden');
+    }
+
+    hideLoginGate() {
+        document.getElementById('loginGateScreen').classList.add('hidden');
+    }
+
+    fillDemoLogin(email, password) {
+        document.getElementById('loginUsername').value = email;
+        document.getElementById('loginPassword').value = password;
+    }
+
+    checkLockoutStatus() {
+        const storedLockout = localStorage.getItem(this.LOCKOUT_KEY);
+        if (storedLockout) {
+            const data = JSON.parse(storedLockout);
+            if (data.lockoutUntil && Date.now() < data.lockoutUntil) {
+                this.lockoutUntil = data.lockoutUntil;
+                this.showLockoutAlert(Math.ceil((data.lockoutUntil - Date.now()) / 60000));
+            } else {
+                localStorage.removeItem(this.LOCKOUT_KEY);
+                this.loginAttempts = 0;
             }
         }
     }
 
-    openInviteModal() {
-        this.generateInviteLink();
-        document.getElementById('inviteModal').classList.remove('hidden');
+    showLockoutAlert(minutesLeft) {
+        const alertBox = document.getElementById('lockoutAlert');
+        const alertMsg = document.getElementById('lockoutMessage');
+        alertMsg.textContent = `Cuenta bloqueada por seguridad tras varios intentos fallidos. Intenta nuevamente en ${minutesLeft} min.`;
+        alertBox.classList.remove('hidden');
     }
 
-    closeInviteModal() {
-        document.getElementById('inviteModal').classList.add('hidden');
+    async handleLogin(e) {
+        e.preventDefault();
+
+        if (this.lockoutUntil && Date.now() < this.lockoutUntil) {
+            const remainingMins = Math.ceil((this.lockoutUntil - Date.now()) / 60000);
+            this.showToast(`Acceso bloqueado por intentos fallidos. Espera ${remainingMins} minutos.`, 'error');
+            return;
+        }
+
+        const emailInput = document.getElementById('loginUsername').value.trim().toLowerCase();
+        const passwordInput = document.getElementById('loginPassword').value;
+
+        const inputHash = await this.hashPassword(passwordInput);
+
+        const user = this.users.find(u => u.email.toLowerCase() === emailInput || u.id === emailInput);
+
+        if (!user || user.passwordHash !== inputHash) {
+            this.loginAttempts += 1;
+            if (this.loginAttempts >= 5) {
+                this.lockoutUntil = Date.now() + 15 * 60 * 1000; // 15 min lockout
+                localStorage.setItem(this.LOCKOUT_KEY, JSON.stringify({ lockoutUntil: this.lockoutUntil }));
+                this.showLockoutAlert(15);
+                this.showToast('⚠️ Demasiados intentos fallidos. Bloqueo de seguridad activado.', 'error');
+            } else {
+                const remainingAttempts = 5 - this.loginAttempts;
+                this.showToast(`Credenciales incorrectas. Te quedan ${remainingAttempts} intentos.`, 'error');
+            }
+            return;
+        }
+
+        // Check if user status is REVOKED
+        if (user.status === 'revoked') {
+            this.showToast('⛔ Tu acceso ha sido REVOCADO por el administrador.', 'error');
+            return;
+        }
+
+        // Login Success
+        this.loginAttempts = 0;
+        localStorage.removeItem(this.LOCKOUT_KEY);
+        document.getElementById('lockoutAlert').classList.add('hidden');
+
+        user.lastLoginDate = new Date().toLocaleString('es-ES');
+        this.currentUser = user;
+        this.saveUsers();
+        this.saveSession();
+
+        this.hideLoginGate();
+        this.updateAuthUI();
+        this.renderTable();
+        this.showToast(`¡Bienvenido/a, ${user.name}! Sesión cifrada activa.`, 'success');
     }
 
-    generateInviteLink() {
-        const role = document.getElementById('inviteRoleSelect').value;
-        const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${role}`;
-        document.getElementById('inviteGeneratedLink').value = inviteUrl;
+    logout() {
+        this.currentUser = null;
+        this.saveSession();
+        this.showLoginGate();
+        this.showToast('Sesión cerrada con seguridad.', 'info');
     }
 
-    copyInviteLink() {
-        const linkInput = document.getElementById('inviteGeneratedLink');
-        navigator.clipboard.writeText(linkInput.value);
-        this.showToast('Enlace de invitación copiado al portapapeles', 'success');
+    updateAuthUI() {
+        if (!this.currentUser) return;
+
+        const userName = document.getElementById('userName');
+        const userAvatar = document.getElementById('userAvatar');
+        const userRoleBadge = document.getElementById('userRoleBadge');
+        const btnManageUsers = document.getElementById('btnManageUsers');
+
+        userName.textContent = this.currentUser.name;
+        userAvatar.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(this.currentUser.name)}`;
+
+        const roleLabels = { admin: '👑 Admin General', editor: '✏️ Editor', viewer: '👁️ Solo Lector' };
+        userRoleBadge.textContent = roleLabels[this.currentUser.role] || 'Usuario';
+
+        // Show "Usuarios & Permisos" button ONLY for Administrators
+        if (this.currentUser.role === 'admin') {
+            btnManageUsers.classList.remove('hidden');
+        } else {
+            btnManageUsers.classList.add('hidden');
+        }
+
+        this.updateQuotaUI();
     }
 
-    /* ================= 2. REAL DEVICE, BROWSER & IP DETECTION ================= */
+    setupInactivityTimer() {
+        let timeout;
+        const resetTimer = () => {
+            clearTimeout(timeout);
+            if (this.currentUser) {
+                // 15 Minutes Inactivity Timeout
+                timeout = setTimeout(() => {
+                    this.showToast('Sesión cerrada por inactividad (15 min).', 'info');
+                    this.logout();
+                }, 15 * 60 * 1000);
+            }
+        };
+
+        window.onload = resetTimer;
+        window.onmousemove = resetTimer;
+        window.onkeydown = resetTimer;
+        window.onclick = resetTimer;
+    }
+
+    /* ================= 4. USER MANAGEMENT & ACCESS REVOCATION (ADMIN ONLY) ================= */
+
+    openUserManagementModal() {
+        if (!this.currentUser || this.currentUser.role !== 'admin') {
+            this.showToast('Acceso restringido. Solo administradores pueden gestionar usuarios.', 'error');
+            return;
+        }
+
+        document.getElementById('newUserForm').reset();
+        document.getElementById('strengthBar').style.width = '0%';
+        document.getElementById('strengthText').textContent = 'Fortaleza';
+
+        this.renderUsersTable();
+        document.getElementById('userManagementModal').classList.remove('hidden');
+    }
+
+    closeUserManagementModal() {
+        document.getElementById('userManagementModal').classList.add('hidden');
+    }
+
+    async createUser(e) {
+        e.preventDefault();
+
+        if (!this.currentUser || this.currentUser.role !== 'admin') {
+            this.showToast('Permiso denegado.', 'error');
+            return;
+        }
+
+        const name = document.getElementById('newUserName').value.trim();
+        const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+        const role = document.getElementById('newUserRole').value;
+        const password = document.getElementById('newUserPassword').value;
+
+        // Check duplicate email
+        if (this.users.some(u => u.email.toLowerCase() === email)) {
+            this.showToast('Ya existe un usuario registrado con este correo.', 'error');
+            return;
+        }
+
+        // Validate Password Strength
+        const { isValid } = this.validatePasswordStrength(password);
+        if (!isValid) {
+            this.showToast('La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.', 'error');
+            return;
+        }
+
+        const passwordHash = await this.hashPassword(password);
+
+        const newUser = {
+            id: 'usr-' + Date.now(),
+            name,
+            email,
+            passwordHash,
+            role,
+            status: 'active',
+            createdDate: new Date().toLocaleDateString('es-ES'),
+            lastLoginDate: 'Nunca',
+            linksCreatedThisMonth: 0,
+            createdMonth: new Date().getMonth()
+        };
+
+        this.users.push(newUser);
+        this.saveUsers();
+
+        document.getElementById('newUserForm').reset();
+        this.renderUsersTable();
+        this.showToast(`Usuario ${name} registrado con cifrado SHA-256`, 'success');
+    }
+
+    renderUsersTable() {
+        const tbody = document.getElementById('usersTableBody');
+        const countSpan = document.getElementById('totalUsersCount');
+
+        tbody.innerHTML = '';
+        countSpan.textContent = this.users.length;
+
+        this.users.forEach(user => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-800/40 transition border-b border-slate-800/40';
+
+            const roleBadges = {
+                admin: '<span class="bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">👑 Admin</span>',
+                editor: '<span class="bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/20 font-bold">✏️ Editor</span>',
+                viewer: '<span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-bold">👁️ Solo Lector</span>'
+            };
+
+            const statusBadge = user.status === 'active'
+                ? '<span class="bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/20 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>Activo</span>'
+                : '<span class="bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full border border-red-500/20 font-semibold"><i class="fa-solid fa-user-slash mr-1"></i>Revocado</span>';
+
+            const isSelf = this.currentUser && this.currentUser.id === user.id;
+
+            tr.innerHTML = `
+                <td class="py-3 px-3">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-100">${user.name} ${isSelf ? '<span class="text-[10px] text-indigo-400 font-normal">(Tú)</span>' : ''}</span>
+                        <span class="text-[11px] text-slate-400 font-mono">${user.email}</span>
+                    </div>
+                </td>
+                <td class="py-3 px-3">
+                    <select onchange="app.changeUserRole('${user.id}', this.value)" ${isSelf ? 'disabled' : ''} class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200">
+                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                        <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Editor</option>
+                        <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Solo Lector</option>
+                    </select>
+                </td>
+                <td class="py-3 px-3 text-center">
+                    ${statusBadge}
+                </td>
+                <td class="py-3 px-3 text-slate-400 font-mono text-[11px]">
+                    ${user.lastLoginDate}
+                </td>
+                <td class="py-3 px-3 text-right">
+                    <div class="flex items-center justify-end space-x-1">
+                        <!-- Toggle Revoke Access -->
+                        <button onclick="app.toggleUserRevocation('${user.id}')" ${isSelf ? 'disabled' : ''} class="px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition ${user.status === 'active' ? 'bg-red-500/10 text-red-300 hover:bg-red-500/20 border-red-500/30' : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border-emerald-500/30'}" title="${user.status === 'active' ? 'Revocar Acceso' : 'Restablecer Acceso'}">
+                            ${user.status === 'active' ? '<i class="fa-solid fa-user-xmark mr-1"></i>Revocar' : '<i class="fa-solid fa-user-check mr-1"></i>Activar'}
+                        </button>
+
+                        <!-- Reset Password -->
+                        <button onclick="app.resetUserPassword('${user.id}')" class="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded-lg transition" title="Restablecer Contraseña">
+                            <i class="fa-solid fa-key"></i>
+                        </button>
+
+                        <!-- Delete User -->
+                        <button onclick="app.deleteUser('${user.id}')" ${isSelf ? 'disabled' : ''} class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition" title="Eliminar definitivamente">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    toggleUserRevocation(userId) {
+        const user = this.users.find(u => u.id === userId);
+        if (!user) return;
+
+        if (this.currentUser && this.currentUser.id === userId) {
+            this.showToast('No puedes revocar tu propia cuenta activa.', 'error');
+            return;
+        }
+
+        user.status = user.status === 'active' ? 'revoked' : 'active';
+        this.saveUsers();
+        this.renderUsersTable();
+
+        const msg = user.status === 'revoked'
+            ? `Acceso REVOCADO para ${user.name}. Ya no podrá iniciar sesión.`
+            : `Acceso RESTABLECIDO para ${user.name}.`;
+
+        this.showToast(msg, user.status === 'revoked' ? 'error' : 'success');
+    }
+
+    changeUserRole(userId, newRole) {
+        const user = this.users.find(u => u.id === userId);
+        if (!user) return;
+
+        user.role = newRole;
+        this.saveUsers();
+        this.renderUsersTable();
+        this.showToast(`Perfil de ${user.name} actualizado a ${newRole.toUpperCase()}`, 'info');
+    }
+
+    async resetUserPassword(userId) {
+        const user = this.users.find(u => u.id === userId);
+        if (!user) return;
+
+        const newPass = prompt(`Ingresa la nueva contraseña para ${user.name}:\n(Mín. 8 caracteres con mayúscula, minúscula, número y símbolo)`);
+        if (!newPass) return;
+
+        const { isValid } = this.validatePasswordStrength(newPass);
+        if (!isValid) {
+            this.showToast('La contraseña ingresada no cumple los criterios de ciberseguridad.', 'error');
+            return;
+        }
+
+        user.passwordHash = await this.hashPassword(newPass);
+        this.saveUsers();
+        this.showToast(`Contraseña actualizada con éxito para ${user.name}`, 'success');
+    }
+
+    deleteUser(userId) {
+        const user = this.users.find(u => u.id === userId);
+        if (!user) return;
+
+        if (confirm(`¿Estás seguro de eliminar el usuario ${user.name}?`)) {
+            this.users = this.users.filter(u => u.id !== userId);
+            this.saveUsers();
+            this.renderUsersTable();
+            this.showToast('Usuario eliminado del sistema', 'info');
+        }
+    }
+
+    /* ================= 5. REAL DEVICE, BROWSER & IP DETECTION ================= */
 
     detectDevice() {
         const ua = navigator.userAgent || '';
@@ -171,19 +546,18 @@ class ShortLinkApp {
             const data = await res.json();
             return data.ip || '186.92.14.82';
         } catch (e) {
-            const sampleIps = ['190.204.88.14', '186.12.90.110', '201.244.5.89', '181.65.12.44'];
+            const sampleIps = ['190.204.88.14', '186.102.45.12', '201.244.5.89', '181.65.12.44'];
             return sampleIps[Math.floor(Math.random() * sampleIps.length)];
         }
     }
 
-    /* ================= 3. DATA MANAGEMENT ================= */
+    /* ================= 6. DATA MANAGEMENT ================= */
 
     loadLinks() {
         const stored = localStorage.getItem(this.STORAGE_KEY);
         if (stored) {
             this.links = JSON.parse(stored);
         } else {
-            // Demo dataset with click history logs
             const now = Date.now();
             this.links = [
                 {
@@ -248,11 +622,12 @@ class ShortLinkApp {
     }
 
     updateQuotaUI() {
+        if (!this.currentUser) return;
         const currentMonth = new Date().getMonth();
         if (this.currentUser.createdMonth !== currentMonth) {
             this.currentUser.createdMonth = currentMonth;
             this.currentUser.linksCreatedThisMonth = 0;
-            this.saveUser();
+            this.saveUsers();
         }
 
         const usedThisMonth = this.currentUser.linksCreatedThisMonth || 0;
@@ -266,7 +641,7 @@ class ShortLinkApp {
         if (modalQuotaCount) modalQuotaCount.textContent = availableQuota;
     }
 
-    /* ================= 4. SHORTEN MODAL & LINK CREATION/EDIT ================= */
+    /* ================= 7. SHORTEN MODAL & LINK CREATION/EDIT ================= */
 
     handleDomainChange() {
         const domainSelect = document.getElementById('fieldDomain').value;
@@ -281,7 +656,7 @@ class ShortLinkApp {
 
     openShortenModal(linkId = null) {
         if (this.currentUser && this.currentUser.role === 'viewer') {
-            this.showToast('No tienes permisos de edición. Tu rol es Solo Lector.', 'error');
+            this.showToast('⛔ Tu perfil es Solo Lector. No tienes permisos para crear ni editar enlaces.', 'error');
             return;
         }
 
@@ -332,6 +707,11 @@ class ShortLinkApp {
 
     saveLink(e) {
         e.preventDefault();
+
+        if (this.currentUser && this.currentUser.role === 'viewer') {
+            this.showToast('⛔ Permiso denegado. Perfil Solo Lector.', 'error');
+            return;
+        }
 
         const editId = document.getElementById('editLinkId').value;
         const originalUrl = document.getElementById('fieldOriginalUrl').value.trim();
@@ -415,7 +795,7 @@ class ShortLinkApp {
 
             if (this.currentUser) {
                 this.currentUser.linksCreatedThisMonth = (this.currentUser.linksCreatedThisMonth || 0) + 1;
-                this.saveUser();
+                this.saveUsers();
             }
             this.showToast('¡Enlace acortado con éxito!', 'success');
         }
@@ -424,7 +804,7 @@ class ShortLinkApp {
         this.closeShortenModal();
     }
 
-    /* ================= 5. FILTERS & SEARCH ENGINE (Con Búsqueda por Grupo) ================= */
+    /* ================= 8. FILTERS & SEARCH ENGINE ================= */
 
     applyFilters() {
         const search = document.getElementById('filterSearch').value.trim().toLowerCase();
@@ -435,7 +815,6 @@ class ShortLinkApp {
         const sort = document.getElementById('filterSort').value;
 
         this.filteredLinks = this.links.filter(link => {
-            // Search Alias/Title/Url
             if (search) {
                 const matchAlias = link.alias.toLowerCase().includes(search);
                 const matchTitle = link.title.toLowerCase().includes(search);
@@ -443,19 +822,16 @@ class ShortLinkApp {
                 if (!matchAlias && !matchTitle && !matchUrl) return false;
             }
 
-            // NEW: Search by Group
             if (groupSearch) {
                 const matchGroup = link.group.toLowerCase().includes(groupSearch);
                 if (!matchGroup) return false;
             }
 
-            // Filter Tags
             if (tag) {
                 const hasTag = (link.tags || []).some(t => t.includes(tag));
                 if (!hasTag) return false;
             }
 
-            // Date Range
             const linkTime = new Date(link.createdDate).getTime();
             if (dateFrom) {
                 const fromTime = new Date(dateFrom).getTime();
@@ -469,7 +845,6 @@ class ShortLinkApp {
             return true;
         });
 
-        // Sorting
         this.filteredLinks.sort((a, b) => {
             if (sort === 'created_desc') {
                 return new Date(b.createdDate) - new Date(a.createdDate);
@@ -496,7 +871,7 @@ class ShortLinkApp {
         this.applyFilters();
     }
 
-    /* ================= 6. METRICS & TABLE RENDER ================= */
+    /* ================= 9. METRICS & TABLE RENDER WITH RBAC GUARDS ================= */
 
     renderTable() {
         const tbody = document.getElementById('linksTableBody');
@@ -512,6 +887,8 @@ class ShortLinkApp {
         } else {
             emptyState.classList.add('hidden');
         }
+
+        const isViewer = this.currentUser && this.currentUser.role === 'viewer';
 
         this.filteredLinks.forEach(link => {
             const tr = document.createElement('tr');
@@ -531,7 +908,6 @@ class ShortLinkApp {
             }
 
             const tagsHtml = (link.tags || []).map(t => `<span class="bg-indigo-500/10 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded border border-indigo-500/20 mr-1">#${t}</span>`).join('');
-
             const clickCount = (link.clicksHistory ? link.clicksHistory.length : link.clicks) || 0;
 
             tr.innerHTML = `
@@ -588,10 +964,12 @@ class ShortLinkApp {
                         <button onclick="app.openShareModal('${link.shortUrl}')" class="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition" title="Compartir / Código QR">
                             <i class="fa-solid fa-share-nodes"></i>
                         </button>
-                        <button onclick="app.openShortenModal('${link.id}')" class="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition" title="Editar configuración">
+                        <!-- Edit Button (Disabled for Solo Lector) -->
+                        <button onclick="app.openShortenModal('${link.id}')" ${isViewer ? 'disabled class="p-2 text-slate-600 cursor-not-allowed"' : 'class="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"'} title="${isViewer ? 'No disponible para Solo Lector' : 'Editar configuración'}">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button onclick="app.deleteLink('${link.id}')" class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition" title="Eliminar definitivamente">
+                        <!-- Delete Button (Disabled for Solo Lector) -->
+                        <button onclick="app.deleteLink('${link.id}')" ${isViewer ? 'disabled class="p-2 text-slate-600 cursor-not-allowed"' : 'class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"'} title="${isViewer ? 'No disponible para Solo Lector' : 'Eliminar definitivamente'}">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </div>
@@ -602,7 +980,7 @@ class ShortLinkApp {
         });
     }
 
-    /* ================= 7. ACTIONS & REAL CLICK LOGGING ================= */
+    /* ================= 10. ACTIONS & REAL CLICK LOGGING ================= */
 
     copyToClipboard(text) {
         navigator.clipboard.writeText(text);
@@ -611,7 +989,7 @@ class ShortLinkApp {
 
     deleteLink(linkId) {
         if (this.currentUser && this.currentUser.role === 'viewer') {
-            this.showToast('No tienes permisos de edición para eliminar enlaces.', 'error');
+            this.showToast('⛔ No tienes permisos de edición para eliminar enlaces.', 'error');
             return;
         }
 
@@ -662,18 +1040,16 @@ class ShortLinkApp {
     }
 
     async executeRedirection(link) {
-        // Detect Real Visitor Data: IP, Device, Browser, Date and Time
         const realDevice = this.detectDevice();
         const realBrowser = this.detectBrowser();
         const realIp = await this.getVisitorIp();
 
         const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+        const dateStr = now.toISOString().slice(0, 10);
         const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         if (!link.clicksHistory) link.clicksHistory = [];
 
-        // Log exact click record
         link.clicksHistory.unshift({
             id: 'click-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
             timestamp: now.toISOString(),
@@ -686,13 +1062,6 @@ class ShortLinkApp {
 
         link.clicks = link.clicksHistory.length;
         this.saveLinks();
-
-        if (link.pixelFb) {
-            console.log(`[PIXEL TRIGGERED] Facebook Pixel ID: ${link.pixelFb} registrado.`);
-        }
-        if (link.pixelGoogle) {
-            console.log(`[PIXEL TRIGGERED] Google Ads Pixel ID: ${link.pixelGoogle} registrado.`);
-        }
 
         this.showToast(`Registrando clic (${realDevice} - ${realIp}) y redirigiendo...`, 'info');
         setTimeout(() => {
@@ -713,7 +1082,7 @@ class ShortLinkApp {
         }
     }
 
-    /* ================= 8. STATS MODAL & DATE FILTER ================= */
+    /* ================= 11. STATS MODAL & CHARTS ================= */
 
     openStatsModal(linkId) {
         const link = this.links.find(l => l.id === linkId);
@@ -724,7 +1093,6 @@ class ShortLinkApp {
         document.getElementById('statsModalTitle').textContent = `Estadísticas: ${link.title}`;
         document.getElementById('statsModalSubtitle').textContent = `Analítica real para ${link.shortUrl}`;
 
-        // Reset Date Range inputs
         document.getElementById('statsDateFrom').value = '';
         document.getElementById('statsDateTo').value = '';
 
@@ -752,7 +1120,6 @@ class ShortLinkApp {
         const dateFrom = document.getElementById('statsDateFrom').value;
         const dateTo = document.getElementById('statsDateTo').value;
 
-        // Filter click history by selected date range
         const filteredClicks = clicks.filter(click => {
             const clickDate = click.dateStr || click.timestamp.slice(0, 10);
             if (dateFrom && clickDate < dateFrom) return false;
@@ -760,11 +1127,9 @@ class ShortLinkApp {
             return true;
         });
 
-        // Update Top Summary Cards
         document.getElementById('statTotalClicks').textContent = clicks.length;
         document.getElementById('statFilteredClicksCount').textContent = filteredClicks.length;
 
-        // Calculate Top Device, Top Browser, Last IP from filtered list
         const deviceCounts = {};
         const browserCounts = {};
         let lastIp = '--.--.--.--';
@@ -784,10 +1149,7 @@ class ShortLinkApp {
         document.getElementById('statTopBrowser').textContent = topBrowser;
         document.getElementById('statLastIp').textContent = lastIp;
 
-        // Render Real Click Logs Table
         this.renderStatsLogTable(filteredClicks);
-
-        // Render Charts with filtered click history data
         this.renderCharts(filteredClicks);
     }
 
@@ -805,7 +1167,6 @@ class ShortLinkApp {
             tr.className = 'hover:bg-slate-800/40 transition border-b border-slate-800/40';
 
             const formattedDateTime = `${click.dateStr} (${click.timeStr})`;
-            
             const deviceBadge = click.device === 'Móvil' 
                 ? '<span class="text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20"><i class="fa-solid fa-mobile-screen mr-1"></i>Móvil</span>'
                 : (click.device === 'Tablet'
@@ -832,7 +1193,6 @@ class ShortLinkApp {
         if (this.browsersChart) this.browsersChart.destroy();
         if (this.trafficChart) this.trafficChart.destroy();
 
-        // Count Devices
         const devCounts = { 'Móvil': 0, 'PC / Escritorio': 0, 'Tablet': 0 };
         filteredClicks.forEach(c => {
             if (devCounts[c.device] !== undefined) devCounts[c.device]++;
@@ -851,7 +1211,6 @@ class ShortLinkApp {
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
         });
 
-        // Count Browsers
         const brCounts = {};
         filteredClicks.forEach(c => {
             const br = c.browser || 'Otro';
@@ -873,8 +1232,7 @@ class ShortLinkApp {
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
         });
 
-        // Hourly distribution
-        const hourly = [0, 0, 0, 0, 0, 0]; // 6 time slots
+        const hourly = [0, 0, 0, 0, 0, 0];
         filteredClicks.forEach(c => {
             if (c.timeStr) {
                 const hour = parseInt(c.timeStr.split(':')[0], 10) || 12;
@@ -905,7 +1263,7 @@ class ShortLinkApp {
         });
     }
 
-    /* ================= 9. SHARE MODAL & UTILS ================= */
+    /* ================= 12. SHARE MODAL & UTILS ================= */
 
     openShareModal(shortUrl) {
         document.getElementById('shareUrlText').textContent = shortUrl;

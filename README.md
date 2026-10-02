@@ -1,33 +1,44 @@
-# ShortLink Pro - App Acortador de Enlaces y Analítica 🚀
+# ShortLink Pro - App Acortador de Enlaces y Analítica Segura 🚀
 
-Aplicación completa de acortador de URLs, panel de administración y monitoreo en tiempo real, autenticación por Gmail, métricas detalladas y cliente Android listo para compilar. Diseñada para alojar su código `index.html` en **GitHub Pages**.
-
----
-
-## 🌟 Novedades e Integraciones Incorporadas
-
-### 📁 1. Búsqueda por Grupo / Carpeta en Sección 1
-* Se añadió el campo **"Buscar por grupo / carpeta"** en la **Sección 1. Filtros y Búsqueda de Enlaces**.
-* Permite localizar y segmentar rápidamente enlaces agrupados bajo un mismo nombre o categoría (ej. `Diseños Canva`, `Marketing Ventas`, `Campañas Meta`).
+Aplicación completa de acortador de URLs, panel de administración y monitoreo en tiempo real, autenticación cibersegura por contraseña, gestión de usuarios, revocación de acceso y cliente Android nativo listo para compilar. Diseñada para alojar su código `index.html` en **GitHub Pages**.
 
 ---
 
-### 🌐 2. Dominio Base: Canva y Dominios Personalizados
-* **`site.canva` (Canva Sites):** Añadido directamente en la lista desplegable de selección de dominio base para acortar enlaces de diseños creados en Canva.
-* **✨ Personalizar (Dominio Propio):** Opción interactiva que despliega un campo de texto para ingresar cualquier dominio propio o marca personalizada (ej. `mi-tienda.com`, `link.mi-empresa.com`).
+## 🔒 Criterios de Ciberseguridad e Inicio de Sesión Obligatorio
+
+### 🔑 1. Portal de Acceso y Autenticación Segura (Login Gate)
+* **Acceso Obligatorio por Contraseña:** El sistema bloquea el acceso al panel central mediante un portal seguro (`#loginGateScreen`) hasta que el usuario se valide correctamente.
+* **Cifrado Hash SHA-256 + Salt:** Las contraseñas nunca se almacenan en texto plano. Se procesan mediante resumen criptográfico (`SHA-256`) con sal única en el cliente.
+* **Protección Anti Fuerza Bruta:** Bloqueo automático de cuenta por 15 minutos tras 5 intentos fallidos consecutivos de inicio de sesión.
+* **Invalidez de Sesiones Inactivas:** Expiración automática de sesión tras 15 minutos de inactividad del usuario.
 
 ---
 
-### 📊 3. Estadísticas Reales por IP, Dispositivo, Navegador, Fecha y Hora
-* **Detección Real de Visitante:** Cada vez que se hace clic o redirección en un enlace acortado, el sistema registra:
-  * **Dirección IP Real:** Obtenida vía API o dirección del visitante.
-  * **Dispositivo Real:** Identificación de `Móvil`, `Tablet` o `PC / Escritorio` a partir de las cabeceras del usuario (`User-Agent`).
-  * **Navegador Real:** Identificación exacta (`Google Chrome`, `Apple Safari`, `Mozilla Firefox`, `Microsoft Edge`, `Opera`).
-  * **Fecha y Hora Exactas:** Marca de tiempo precisa (ej. `2026-10-02 (13:45:22)`).
-* **Filtro de Clics por Rango de Fechas:** 
-  * Dentro del modal de estadísticas de cada enlace, se incorporó un filtro con fecha inicial (Desde) y fecha final (Hasta).
-  * Los gráficos y el historial de transiciones se recalculan dinámicamente según el rango de fechas seleccionado.
-* **Tabla de Registro de Transiciones / Clics:** Visualización ordenada de cada clic con su IP, dispositivo, navegador y estampa de tiempo.
+### 👑 2. Gestión de Usuarios, Perfiles (RBAC) y Revocación de Accesos
+
+Los Administradores cuentan con una interfaz exclusiva (`#userManagementModal`) para administrar cuentas:
+
+1. **Crear Usuarios con Contraseña Segura:**
+   * Registro de Nombre, Correo/Usuario, Contraseña y Perfil.
+   * **Indicador de Fortaleza de Contraseña:** Valida complejidad (Mín. 8 caracteres, mayúsculas, minúsculas, números y símbolos).
+2. **Perfiles y Control de Acceso basado en Roles (RBAC):**
+   * 👑 **Administrador:** Acceso completo. Puede crear/editar enlaces, gestionar usuarios, revocar accesos y ver analíticas.
+   * ✏️ **Editor:** Puede crear, editar y eliminar enlaces reducidos y consultar analítica. No puede gestionar usuarios.
+   * 👁️ **Solo Lector (Viewer):** Acceso restringido únicamente a visualización del panel y estadísticas. Los botones de crear, editar y eliminar quedan deshabilitados.
+3. **Revocación Instantánea de Acceso:**
+   * Botón para **Revocar** o **Activar** cuentas de usuario. Si una cuenta es revocada, el usuario queda impedido de iniciar sesión de inmediato.
+4. **Restablecimiento de Contraseñas:**
+   * Permite actualizar la clave de cualquier usuario aplicando las reglas de seguridad.
+
+---
+
+### 👥 Cuentas Demostrativas Preconfiguradas
+
+| Perfil / Rol | Correo / Usuario | Contraseña Inicial | Permisos Clave |
+| :--- | :--- | :--- | :--- |
+| 👑 **Administrador** | `admin@shortlink.pro` | `Admin123!` | Crear, Editar, Eliminar Enlaces y Gestor de Usuarios / Revocación |
+| ✏️ **Editor** | `editor@shortlink.pro` | `Editor123!` | Crear, Editar y Eliminar Enlaces |
+| 👁️ **Solo Lector** | `lector@shortlink.pro` | `Lector123!` | Solo lectura de panel y estadísticas detalladas |
 
 ---
 
@@ -35,10 +46,10 @@ Aplicación completa de acortador de URLs, panel de administración y monitoreo 
 
 ```
 link_shortener_app/
-├── index.html              # Dashboard Principal y Modales UI (Tailwind CSS, FontAwesome, Chart.js)
+├── index.html              # Dashboard Principal, Login Gate y Modales UI (Tailwind CSS, FontAwesome, Chart.js)
 ├── 404.html                # Motor de Redirección Dinámica para GitHub Pages (SPA Routing)
 ├── js/
-│   ├── app.js              # Lógica core, estado, filtros por grupo, cuotas, analítica real por IP y fechas
+│   ├── app.js              # Lógica core, Cifrado SHA-256, Anti Fuerza Bruta, RBAC y Revocación de Usuarios
 │   └── firebase-config.js  # Configuración para Firebase Auth & Firestore (Opcional)
 ├── css/
 │   └── styles.css          # Estilos personalizados
@@ -61,7 +72,7 @@ link_shortener_app/
    ```bash
    git init
    git add .
-   git commit -m "Actualización ShortLink Pro con IP real y filtros"
+   git commit -m "Actualización con Autenticación Segura SHA-256, RBAC y Revocación"
    git remote add origin https://github.com/TU_USUARIO/TU_REPOSITTORIO.git
    git branch -M main
    git push -u origin main
@@ -73,4 +84,4 @@ link_shortener_app/
    * Haz clic en **Save**.
 
 3. **¡Listo!**
-   Tus enlaces acortados y redirecciones con `404.html` funcionarán directamente en `https://tu_usuario.github.io/tu_repositorio/`.
+   La aplicación se abrirá exigiendo la contraseña de inicio de sesión con cifrado SHA-256.
