@@ -9,7 +9,8 @@ class ShortLinkApp {
         this.USERS_KEY = 'shortlink_pro_users_v3';
         this.SESSION_KEY = 'shortlink_pro_active_session_v3';
         this.LOCKOUT_KEY = 'shortlink_pro_lockout_v3';
-        this.SALT = 'ShortLinkProCibersecuritySalt2026!';
+        // Salt generated dynamically and stored in localStorage
+        // (removed hardcoded value for security)
         this.QUOTA_MONTHLY_MAX = 250;
 
         this.users = [];
@@ -30,13 +31,30 @@ class ShortLinkApp {
     }
 
     async init() {
-        await this.loadUsers();
-        this.checkLockoutStatus();
-        this.loadSession();
-        this.loadLinks();
-        this.checkInvitationParams();
-        this.checkRedirection();
-        this.setupInactivityTimer();
+        try {
+            // Initialize dynamic salt
+            this.SALT = localStorage.getItem('shortlink_pro_salt');
+            if (!this.SALT) {
+                const saltChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+                let salt = '';
+                for (let i = 0; i < 16; i++) {
+                    salt += saltChars.charAt(Math.floor(Math.random() * saltChars.length));
+                }
+                this.SALT = salt;
+                localStorage.setItem('shortlink_pro_salt', this.SALT);
+            }
+
+            await this.loadUsers();
+            this.checkLockoutStatus();
+            this.loadSession();
+            this.loadLinks();
+            this.checkInvitationParams();
+            this.checkRedirection();
+            this.setupInactivityTimer();
+        } catch (e) {
+            console.error('Application initialization error:', e);
+            this.showToast('Error al inicializar la aplicación.', 'error');
+        }
     }
 
     /* ================= 1. CYBERSECURITY & CRYPTOGRAPHY ENGINE ================= */
@@ -64,7 +82,7 @@ class ShortLinkApp {
         if (hasNum) score++;
         if (hasSpecial) score++;
 
-        return { score, isValid: score >= 4 && hasMinLen };
+        return { score, isValid: score >= 5 && hasMinLen };
     }
 
     checkPasswordStrength(val) {
@@ -81,6 +99,81 @@ class ShortLinkApp {
         bar.style.width = `${percentages[score]}%`;
         txt.textContent = labels[score];
         txt.className = `text-[10px] font-bold ${score >= 4 ? 'text-emerald-400' : 'text-slate-400'}`;
+    }
+
+    /* ================= URL SECURITY VALIDATION ================= */
+
+    validateTargetUrl(rawUrl) {
+        let url;
+        try {
+            url = new URL(rawUrl);
+        } catch (e) {
+            return { valid: false, reason: 'URL inválida. Incluya el protocolo (https://).' };
+        }
+
+        // Scheme allowlist: blocks javascript:, data:, vbscript:, file:, blob:, etc.
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return { valid: false, reason: 'Esquema no permitido. Solo se aceptan http:// y https://.' };
+        }
+
+        const host = url.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+
+        // Block localhost and reserved TLDs (resolve locally, never public)
+        if (host === 'localhost' || host.endsWith('.localhost') ||
+            host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) {
+            return { valid: false, reason: 'No se permiten destinos locales (localhost, .local, .internal, .lan).' };
+        }
+
+        // Block private/reserved IP literals (loopback, RFC1918, link-local, etc.)
+        if (this.isPrivateOrReservedIp(host)) {
+            return { valid: false, reason: 'No se permiten IPs privadas ni de loopback como destino.' };
+        }
+
+        return { valid: true };
+    }
+
+    isPrivateOrReservedIp(host) {
+        // IPv4 literal. The WHATWG URL parser normalizes alternative notations
+        // (0x7f.0.0.1, 2130706433, 0177.0.0.1) to dotted form before we get here.
+        const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+        if (ipv4) {
+            const a = Number(ipv4[1]);
+            const b = Number(ipv4[2]);
+            const c = Number(ipv4[3]);
+            if ([a, b, c, Number(ipv4[4])].some(n => n > 255)) return false;
+            if (a === 0 || a === 10 || a === 127) return true;                 // 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8
+            if (a === 172 && b >= 16 && b <= 31) return true;                  // 172.16.0.0/12
+            if (a === 192 && b === 168) return true;                           // 192.168.0.0/16
+            if (a === 169 && b === 254) return true;                           // 169.254.0.0/16 link-local
+            if (a === 100 && b >= 64 && b <= 127) return true;                 // 100.64.0.0/10 CGNAT
+            if (a === 198 && (b === 18 || b === 19)) return true;              // 198.18.0.0/15 benchmarking
+            if (a === 192 && b === 0 && (c === 0 || c === 2)) return true;     // 192.0.0.0/24, TEST-NET-1
+            if (a === 192 && b === 88 && c === 99) return true;                // 192.88.99.0/24
+            if (a === 198 && b === 51 && c === 100) return true;               // TEST-NET-2
+            if (a === 203 && b === 0 && c === 113) return true;                // TEST-NET-3
+            if (a >= 224) return true;                                         // multicast + reserved
+            return false;
+        }
+
+        // IPv6 literal
+        if (host.includes(':')) {
+            const v6 = host.toLowerCase();
+            if (v6 === '::' || v6 === '::1') return true;                      // unspecified + loopback
+            if (v6.startsWith('fc') || v6.startsWith('fd')) return true;       // fc00::/7 ULA
+            if (/^fe[89ab]/.test(v6)) return true;                             // fe80::/10 link-local
+            // IPv4-mapped / IPv4-compatible (::ffff:10.0.0.1 serializes as ::ffff:a00:1)
+            const mapped = v6.match(/^::(ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+            if (mapped) {
+                const hi = parseInt(mapped[2], 16);
+                const lo = parseInt(mapped[3], 16);
+                return this.isPrivateOrReservedIp(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+            }
+            const mappedDotted = v6.match(/^::(ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/);
+            if (mappedDotted) return this.isPrivateOrReservedIp(mappedDotted[2]);
+            return false;
+        }
+
+        return false;
     }
 
     togglePasswordVisibility(inputId) {
@@ -220,55 +313,60 @@ class ShortLinkApp {
     }
 
     async handleLogin(e) {
-        e.preventDefault();
+        try {
+            e.preventDefault();
 
-        if (this.lockoutUntil && Date.now() < this.lockoutUntil) {
-            const remainingMins = Math.ceil((this.lockoutUntil - Date.now()) / 60000);
-            this.showToast(`Acceso bloqueado por intentos fallidos. Espera ${remainingMins} minutos.`, 'error');
-            return;
-        }
-
-        const emailInput = document.getElementById('loginUsername').value.trim().toLowerCase();
-        const passwordInput = document.getElementById('loginPassword').value;
-
-        const inputHash = await this.hashPassword(passwordInput);
-
-        const user = this.users.find(u => u.email.toLowerCase() === emailInput || u.id === emailInput);
-
-        if (!user || user.passwordHash !== inputHash) {
-            this.loginAttempts += 1;
-            if (this.loginAttempts >= 5) {
-                this.lockoutUntil = Date.now() + 15 * 60 * 1000; // 15 min lockout
-                localStorage.setItem(this.LOCKOUT_KEY, JSON.stringify({ lockoutUntil: this.lockoutUntil }));
-                this.showLockoutAlert(15);
-                this.showToast('⚠️ Demasiados intentos fallidos. Bloqueo de seguridad activado.', 'error');
-            } else {
-                const remainingAttempts = 5 - this.loginAttempts;
-                this.showToast(`Credenciales incorrectas. Te quedan ${remainingAttempts} intentos.`, 'error');
+            if (this.lockoutUntil && Date.now() < this.lockoutUntil) {
+                const remainingMins = Math.ceil((this.lockoutUntil - Date.now()) / 60000);
+                this.showToast(`Acceso bloqueado por intentos fallidos. Espera ${remainingMins} minutos.`, 'error');
+                return;
             }
-            return;
+
+            const emailInput = document.getElementById('loginUsername').value.trim().toLowerCase();
+            const passwordInput = document.getElementById('loginPassword').value;
+
+            const inputHash = await this.hashPassword(passwordInput);
+
+            const user = this.users.find(u => u.email.toLowerCase() === emailInput || u.id === emailInput);
+
+            if (!user || user.passwordHash !== inputHash) {
+                this.loginAttempts += 1;
+                if (this.loginAttempts >= 5) {
+                    this.lockoutUntil = Date.now() + 15 * 60 * 1000; // 15 min lockout
+                    localStorage.setItem(this.LOCKOUT_KEY, JSON.stringify({ lockoutUntil: this.lockoutUntil }));
+                    this.showLockoutAlert(15);
+                    this.showToast('⚠️ Demasiados intentos fallidos. Bloqueo de seguridad activado.', 'error');
+                } else {
+                    const remainingAttempts = 5 - this.loginAttempts;
+                    this.showToast(`Credenciales incorrectas. Te quedan ${remainingAttempts} intentos.`, 'error');
+                }
+                return;
+            }
+
+            // Check if user status is REVOKED
+            if (user.status === 'revoked') {
+                this.showToast('⛔ Tu acceso ha sido REVOCADO por el administrador.', 'error');
+                return;
+            }
+
+            // Login Success
+            this.loginAttempts = 0;
+            localStorage.removeItem(this.LOCKOUT_KEY);
+            document.getElementById('lockoutAlert').classList.add('hidden');
+
+            user.lastLoginDate = new Date().toLocaleString('es-ES');
+            this.currentUser = user;
+            this.saveUsers();
+            this.saveSession();
+
+            this.hideLoginGate();
+            this.updateAuthUI();
+            this.renderTable();
+            this.showToast(`¡Bienvenido/a, ${user.name}! Sesión cifrada activa.`, 'success');
+        } catch (e) {
+            console.error('Login error:', e);
+            this.showToast('Error durante el inicio de sesión.', 'error');
         }
-
-        // Check if user status is REVOKED
-        if (user.status === 'revoked') {
-            this.showToast('⛔ Tu acceso ha sido REVOCADO por el administrador.', 'error');
-            return;
-        }
-
-        // Login Success
-        this.loginAttempts = 0;
-        localStorage.removeItem(this.LOCKOUT_KEY);
-        document.getElementById('lockoutAlert').classList.add('hidden');
-
-        user.lastLoginDate = new Date().toLocaleString('es-ES');
-        this.currentUser = user;
-        this.saveUsers();
-        this.saveSession();
-
-        this.hideLoginGate();
-        this.updateAuthUI();
-        this.renderTable();
-        this.showToast(`¡Bienvenido/a, ${user.name}! Sesión cifrada activa.`, 'success');
     }
 
     logout() {
@@ -715,16 +813,41 @@ class ShortLinkApp {
 
         const editId = document.getElementById('editLinkId').value;
         const originalUrl = document.getElementById('fieldOriginalUrl').value.trim();
+        
+        // Secure URL validation: allow http/https only, block localhost & private IPs
+        const urlCheck = this.validateTargetUrl(originalUrl);
+        if (!urlCheck.valid) {
+            this.showToast(urlCheck.reason, 'error');
+            return;
+        }
         const title = document.getElementById('fieldTitle').value.trim() || 'Sin título';
         const domainOption = document.getElementById('fieldDomain').value;
         const customDomainVal = document.getElementById('fieldCustomDomain').value.trim().toLowerCase().replace(/^https?:\/\//, '');
 
-        let finalDomain = domainOption;
+        // Whitelist of allowed domains
+        const ALLOWED_DOMAINS = ['goo.su', 'site.canva', 'link.pro', 'short.io'];
+
+        // Validate domain is in allowed list
+        if (!ALLOWED_DOMAINS.includes(domainOption) && domainOption !== 'custom') {
+            this.showToast('Dominio no permitido. Seleccione una opción válida.', 'error');
+            return;
+        }
+
+        // Validate custom domain format if selected
         if (domainOption === 'custom') {
             if (!customDomainVal) {
                 this.showToast('Por favor ingresa tu dominio personalizado.', 'error');
                 return;
             }
+            const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
+            if (!domainRegex.test(customDomainVal)) {
+                this.showToast('Dominio personalizado inválido. Formato: ejemplo.com', 'error');
+                return;
+            }
+        }
+
+        let finalDomain = domainOption;
+        if (domainOption === 'custom') {
             finalDomain = customDomainVal;
         }
 
