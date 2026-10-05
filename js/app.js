@@ -440,52 +440,57 @@ class ShortLinkApp {
     }
 
     async createUser(e) {
-        e.preventDefault();
+        try {
+            e.preventDefault();
 
-        if (!this.currentUser || this.currentUser.role !== 'admin') {
-            this.showToast('Permiso denegado.', 'error');
-            return;
+            if (!this.currentUser || this.currentUser.role !== 'admin') {
+                this.showToast('Permiso denegado.', 'error');
+                return;
+            }
+
+            const name = document.getElementById('newUserName').value.trim();
+            const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+            const role = document.getElementById('newUserRole').value;
+            const password = document.getElementById('newUserPassword').value;
+
+            // Check duplicate email
+            if (this.users.some(u => u.email.toLowerCase() === email)) {
+                this.showToast('Ya existe un usuario registrado con este correo.', 'error');
+                return;
+            }
+
+            // Validate Password Strength
+            const { isValid } = this.validatePasswordStrength(password);
+            if (!isValid) {
+                this.showToast('La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.', 'error');
+                return;
+            }
+
+            const passwordHash = await this.hashPassword(password);
+
+            const newUser = {
+                id: 'usr-' + Date.now(),
+                name,
+                email,
+                passwordHash,
+                role,
+                status: 'active',
+                createdDate: new Date().toLocaleDateString('es-ES'),
+                lastLoginDate: 'Nunca',
+                linksCreatedThisMonth: 0,
+                createdMonth: new Date().getMonth()
+            };
+
+            this.users.push(newUser);
+            this.saveUsers();
+
+            document.getElementById('newUserForm').reset();
+            this.renderUsersTable();
+            this.showToast(`Usuario ${name} registrado con cifrado SHA-256`, 'success');
+        } catch (e) {
+            console.error('Create user error:', e);
+            this.showToast('Error al crear el usuario.', 'error');
         }
-
-        const name = document.getElementById('newUserName').value.trim();
-        const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
-        const role = document.getElementById('newUserRole').value;
-        const password = document.getElementById('newUserPassword').value;
-
-        // Check duplicate email
-        if (this.users.some(u => u.email.toLowerCase() === email)) {
-            this.showToast('Ya existe un usuario registrado con este correo.', 'error');
-            return;
-        }
-
-        // Validate Password Strength
-        const { isValid } = this.validatePasswordStrength(password);
-        if (!isValid) {
-            this.showToast('La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.', 'error');
-            return;
-        }
-
-        const passwordHash = await this.hashPassword(password);
-
-        const newUser = {
-            id: 'usr-' + Date.now(),
-            name,
-            email,
-            passwordHash,
-            role,
-            status: 'active',
-            createdDate: new Date().toLocaleDateString('es-ES'),
-            lastLoginDate: 'Nunca',
-            linksCreatedThisMonth: 0,
-            createdMonth: new Date().getMonth()
-        };
-
-        this.users.push(newUser);
-        this.saveUsers();
-
-        document.getElementById('newUserForm').reset();
-        this.renderUsersTable();
-        this.showToast(`Usuario ${name} registrado con cifrado SHA-256`, 'success');
     }
 
     renderUsersTable() {
@@ -586,21 +591,26 @@ class ShortLinkApp {
     }
 
     async resetUserPassword(userId) {
-        const user = this.users.find(u => u.id === userId);
-        if (!user) return;
+        try {
+            const user = this.users.find(u => u.id === userId);
+            if (!user) return;
 
-        const newPass = prompt(`Ingresa la nueva contraseña para ${user.name}:\n(Mín. 8 caracteres con mayúscula, minúscula, número y símbolo)`);
-        if (!newPass) return;
+            const newPass = prompt(`Ingresa la nueva contraseña para ${user.name}:\n(Mín. 8 caracteres con mayúscula, minúscula, número y símbolo)`);
+            if (!newPass) return;
 
-        const { isValid } = this.validatePasswordStrength(newPass);
-        if (!isValid) {
-            this.showToast('La contraseña ingresada no cumple los criterios de ciberseguridad.', 'error');
-            return;
+            const { isValid } = this.validatePasswordStrength(newPass);
+            if (!isValid) {
+                this.showToast('La contraseña ingresada no cumple los criterios de ciberseguridad.', 'error');
+                return;
+            }
+
+            user.passwordHash = await this.hashPassword(newPass);
+            this.saveUsers();
+            this.showToast(`Contraseña actualizada con éxito para ${user.name}`, 'success');
+        } catch (e) {
+            console.error('Reset password error:', e);
+            this.showToast('Error al restablecer la contraseña.', 'error');
         }
-
-        user.passwordHash = await this.hashPassword(newPass);
-        this.saveUsers();
-        this.showToast(`Contraseña actualizada con éxito para ${user.name}`, 'success');
     }
 
     deleteUser(userId) {
@@ -1124,24 +1134,29 @@ class ShortLinkApp {
     }
 
     async simulateClick(linkId, event) {
-        if (event) event.preventDefault();
+        try {
+            if (event) event.preventDefault();
 
-        const link = this.links.find(l => l.id === linkId);
-        if (!link) return;
+            const link = this.links.find(l => l.id === linkId);
+            if (!link) return;
 
-        if (link.expiration && new Date(link.expiration).getTime() < Date.now()) {
-            this.showToast('Este enlace ha expirado y ya no se encuentra disponible.', 'error');
-            return;
+            if (link.expiration && new Date(link.expiration).getTime() < Date.now()) {
+                this.showToast('Este enlace ha expirado y ya no se encuentra disponible.', 'error');
+                return;
+            }
+
+            if (link.password) {
+                this.currentProtectedLink = link;
+                document.getElementById('protectedInputPass').value = '';
+                document.getElementById('passwordProtectedModal').classList.remove('hidden');
+                return;
+            }
+
+            await this.executeRedirection(link);
+        } catch (e) {
+            console.error('Click simulation error:', e);
+            this.showToast('Error al procesar el clic.', 'error');
         }
-
-        if (link.password) {
-            this.currentProtectedLink = link;
-            document.getElementById('protectedInputPass').value = '';
-            document.getElementById('passwordProtectedModal').classList.remove('hidden');
-            return;
-        }
-
-        await this.executeRedirection(link);
     }
 
     cancelPasswordVerification() {
@@ -1150,46 +1165,56 @@ class ShortLinkApp {
     }
 
     async verifyPasswordAndRedirect() {
-        const inputPass = document.getElementById('protectedInputPass').value;
-        if (!this.currentProtectedLink) return;
+        try {
+            const inputPass = document.getElementById('protectedInputPass').value;
+            if (!this.currentProtectedLink) return;
 
-        if (inputPass === this.currentProtectedLink.password) {
-            const link = this.currentProtectedLink;
-            this.cancelPasswordVerification();
-            await this.executeRedirection(link);
-        } else {
-            this.showToast('Contraseña incorrecta', 'error');
+            if (inputPass === this.currentProtectedLink.password) {
+                const link = this.currentProtectedLink;
+                this.cancelPasswordVerification();
+                await this.executeRedirection(link);
+            } else {
+                this.showToast('Contraseña incorrecta', 'error');
+            }
+        } catch (e) {
+            console.error('Password verification error:', e);
+            this.showToast('Error en la verificación de contraseña.', 'error');
         }
     }
 
     async executeRedirection(link) {
-        const realDevice = this.detectDevice();
-        const realBrowser = this.detectBrowser();
-        const realIp = await this.getVisitorIp();
+        try {
+            const realDevice = this.detectDevice();
+            const realBrowser = this.detectBrowser();
+            const realIp = await this.getVisitorIp();
 
-        const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10);
-        const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10);
+            const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-        if (!link.clicksHistory) link.clicksHistory = [];
+            if (!link.clicksHistory) link.clicksHistory = [];
 
-        link.clicksHistory.unshift({
-            id: 'click-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-            timestamp: now.toISOString(),
-            dateStr: dateStr,
-            timeStr: timeStr,
-            ip: realIp,
-            device: realDevice,
-            browser: realBrowser
-        });
+            link.clicksHistory.unshift({
+                id: 'click-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+                timestamp: now.toISOString(),
+                dateStr: dateStr,
+                timeStr: timeStr,
+                ip: realIp,
+                device: realDevice,
+                browser: realBrowser
+            });
 
-        link.clicks = link.clicksHistory.length;
-        this.saveLinks();
+            link.clicks = link.clicksHistory.length;
+            this.saveLinks();
 
-        this.showToast(`Registrando clic (${realDevice} - ${realIp}) y redirigiendo...`, 'info');
-        setTimeout(() => {
-            window.open(link.originalUrl, '_blank');
-        }, 600);
+            this.showToast(`Registrando clic (${realDevice} - ${realIp}) y redirigiendo...`, 'info');
+            setTimeout(() => {
+                window.open(link.originalUrl, '_blank');
+            }, 600);
+        } catch (e) {
+            console.error('Redirection error:', e);
+            this.showToast('Error al procesar la redirección.', 'error');
+        }
     }
 
     checkRedirection() {
