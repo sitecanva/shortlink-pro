@@ -976,11 +976,15 @@ class ShortLinkApp {
 
             const linkTime = new Date(link.createdDate).getTime();
             if (dateFrom) {
-                const fromTime = new Date(dateFrom).getTime();
+                // Date-only strings parse as UTC; build LOCAL midnight instead
+                const [fromY, fromM, fromD] = dateFrom.split('-').map(Number);
+                const fromTime = new Date(fromY, fromM - 1, fromD).getTime();
                 if (linkTime < fromTime) return false;
             }
             if (dateTo) {
-                const toTime = new Date(dateTo).setHours(23, 59, 59, 999);
+                // Inclusive end-of-day in local time (to the millisecond)
+                const [toY, toM, toD] = dateTo.split('-').map(Number);
+                const toTime = new Date(toY, toM - 1, toD, 23, 59, 59, 999).getTime();
                 if (linkTime > toTime) return false;
             }
 
