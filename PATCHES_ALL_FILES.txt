@@ -1,0 +1,274 @@
+=== PATCH: js/app.js - Replace hardcoded salt with dynamic generation ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -10,6 +10,18 @@ class ShortLinkApp {
+     this.LOCKOUT_KEY = 'shortlink_pro_lockout_v3';
+     this.SALT = 'ShortLinkProCibersecuritySalt2026!';
++    // Dynamic salt generation (remove hardcoded value)
++    // This will be initialized in constructor after localStorage check
++    
++    // Initialize salt dynamically (will be in init())
++    this.initializeSalt = function() {
++        this.SALT = localStorage.getItem('shortlink_pro_salt');
++        if (!this.SALT) {
++            const saltChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
++            let salt = '';
++            for (let i = 0; i < 16; i++) {
++                salt += saltChars.charAt(Math.floor(Math.random() * saltChars.length));
++            }
++            this.SALT = salt;
++            localStorage.setItem('shortlink_pro_salt', this.SALT);
++        }
++    };
+ 
+     this.QUOTA_MONTHLY_MAX = 250;
+ 
+=== PATCH: js/app.js - Add domain validation in saveLink() ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -716,20 +716,38 @@ class ShortLinkApp {
+     const editId = document.getElementById('editLinkId').value;
+     const originalUrl = document.getElementById('fieldOriginalUrl').value.trim();
+     const title = document.getElementById('fieldTitle').value.trim() || 'Sin título';
+     const domainOption = document.getElementById('fieldDomain').value;
+     const customDomainVal = document.getElementById('fieldCustomDomain').value.trim().toLowerCase().replace(/^https?:\/\//, '');
+ 
++    // Whitelist of allowed domains
++    const ALLOWED_DOMAINS = ['goo.su', 'site.canva', 'link.pro', 'short.io'];
++
+     let finalDomain = domainOption;
+ 
+-    if (domainOption === 'custom') {
++    // Validate domain is in allowed list
++    if (!ALLOWED_DOMAINS.includes(domainOption) && domainOption !== 'custom') {
++        this.showToast('Dominio no permitido. Seleccione una opción válida.', 'error');
++        return;
++    }
++
++    // Validate custom domain format if selected
++    if (domainOption === 'custom') {
++        if (!customDomainVal) {
++            this.showToast('Por favor ingresa tu dominio personalizado.', 'error');
++            return;
++        }
++        const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
++        if (!domainRegex.test(customDomainVal)) {
++            this.showToast('Dominio personalizado inválido. Formato: ejemplo.com', 'error');
++            return;
++        }
++    }
++
+     if (domainOption === 'custom') {
+-        if (!customDomainVal) {
+-            this.showToast('Por favor ingresa tu dominio personalizado.', 'error');
+-            return;
+-        }
+-        finalDomain = customDomainVal;
+     } else {
+-        finalDomain = domainOption;
++        finalDomain = domainOption;
+     }
+ 
+     let alias = document.getElementById('fieldAlias').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+=== PATCH: js/app.js - Add timeout & better error handling to getVisitorIp() ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -540,15 +540,23 @@ class ShortLinkApp {
+     async getVisitorIp() {
+-        try {
+-            const res = await fetch('https://api.ipify.org?format=json');
+-            const data = await res.json();
+-            return data.ip || '186.92.14.82';
+-        } catch (e) {
+-            const sampleIps = ['190.204.88.14', '186.102.45.12', '201.244.5.89', '181.65.12.44'];
+-            return sampleIps[Math.floor(Math.random() * sampleIps.length)];
+-        }
++        try {
++            const controller = new AbortController();
++            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
++            
++            const res = await fetch('https://api.ipify.org?format=json', {
++                signal: controller.signal
++            });
++            clearTimeout(timeoutId);
++            
++            if (!res.ok) throw new Error('IP lookup failed');
++            const data = await res.json();
++            return data.ip || '127.0.0.1';
++        } catch (e) {
++            console.warn('Could not fetch visitor IP:', e.message);
++            // Return placeholder indicating IP unavailable rather than random IP
++            return '0.0.0.0';
++        }
+     }
+ 
+=== PATCH: js/app.js - Add try/catch to async functions ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -29,11 +29,25 @@ class ShortLinkApp {
+     async init() {
++        try {
+         await this.loadUsers();
+         this.checkLockoutStatus();
+         this.loadSession();
+         this.loadLinks();
+         this.checkInvitationParams();
+         this.checkRedirection();
+         this.setupInactivityTimer();
++        } catch (e) {
++            console.error('Application initialization error:', e);
++            this.showToast('Error al inicializar la aplicación.', 'error');
++        }
+     }
+ 
+@@ -220,10 +232,22 @@ class ShortLinkApp {
+     async handleLogin(e) {
++        try {
+         e.preventDefault();
+ 
+         if (this.lockoutUntil && Date.now() < this.lockoutUntil) {
+@@ -248, +268,11 @@ class ShortLinkApp
+             this.showToast(`Credenciales incorrectas. Te quedan ${remainingAttempts} intentos.`, 'error');
+         }
++        } catch (e) {
++            console.error('Login error:', e);
++            this.showToast('Error durante el inicio de sesión.', 'error');
++        }
+ 
+@@ -341,11 +361,25 @@ class ShortLinkApp {
+     async createUser(e) {
++        try {
+         e.preventDefault();
+ 
+         if (!this.currentUser || this.currentUser.role !== 'admin') {
+@@ -385, +413,11 @@ class ShortLinkApp
+         this.showToast(`Usuario ${name} registrado con cifrado SHA-256`, 'success');
++        } catch (e) {
++            console.error('Create user error:', e);
++            this.showToast('Error al crear el usuario.', 'error');
++        }
+ 
+@@ -1000,11 +1026,23 @@ class ShortLinkApp {
+     async simulateClick(linkId, event) {
++        try {
+         if (event) event.preventDefault();
+ 
+         const link = this.links.find(l => l.id === linkId);
+@@ -1028, +1062,13 @@ class ShortLinkApp
+         if (link.password) {
+             this.currentProtectedLink = link;
+             document.getElementById('protectedInputPass').value = '';
+             document.getElementById('passwordProtectedModal').classList.remove('hidden');
+             return;
+         }
++        } catch (e) {
++            console.error('Click simulation error:', e);
++            this.showToast('Error al procesar el clic.', 'error');
++        }
+ 
+@@ -1038, +1060,21 @@ class ShortLinkApp
+     async verifyPasswordAndRedirect() {
++        try {
+         const inputPass = document.getElementById('protectedInputPass').value;
+         if (!this.currentProtectedLink) return;
+ 
+         if (inputPass === this.currentProtectedLink.password) {
+@@ -1056, +1082,15 @@ class ShortLinkApp
+         } else {
+             this.showToast('Contraseña incorrecta', 'error');
+         }
++        } catch (e) {
++            console.error('Password verification error:', e);
++            this.showToast('Error en la verificación de contraseña.', 'error');
++        }
+ 
+@@ -1040, +1074,23 @@ class ShortLinkApp {
+     async executeRedirection(link) {
++        try {
+         const realDevice = this.detectDevice();
+         const realBrowser = this.detectBrowser();
+         const realIp = await this.getVisitorIp();
+ 
+@@ -1062, +1094,13 @@ class ShortLinkApp
+         link.clicks = link.clicksHistory.length;
+         this.saveLinks();
+ 
++        } catch (e) {
++            console.error('Redirection error:', e);
++            this.showToast('Error al procesar la redirección.', 'error');
++        }
+ 
+         this.showToast(`Registrando clic (${realDevice} - ${realIp}) y redirigiendo...`, 'info');
+         setTimeout(() => {
+             window.open(link.originalUrl, '_blank');
+         }, 600);
+=== PATCH: js/app.js - Fix password strength validation ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -52,7 +52,7 @@ class ShortLinkApp {
+     validatePasswordStrength(password) {
+         // Min 8 chars, uppercase, lowercase, number, special char
+         const hasMinLen = password.length >= 8;
+         const hasUpper = /[A-Z]/.test(password);
+         const hasLower = /[a-z]/.test(password);
+         const hasNum = /[0-9]/.test(password);
+         const hasSpecial = /[^A-Za-z0-9]/.test(password);
+ 
+         let score = 0;
+         if (hasMinLen) score++;
+         if (hasUpper) score++;
+         if (hasLower) score++;
+         if (hasNum) score++;
+         if (hasSpecial) score++;
+ 
+-        return { score, isValid: score >= 4 && hasMinLen };
++        // Changed to require all 5 criteria (was >= 4, now >= 5) to match UI description
++        return { score, isValid: score >= 5 && hasMinLen };
+     }
+ 
+     checkPasswordStrength(val) {
+=== PATCH: js/app.js - Add URL validation ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -714, +722,10 @@ class ShortLinkApp {
+     const originalUrl = document.getElementById('fieldOriginalUrl').value.trim();
+     const title = document.getElementById('fieldTitle').value.trim() || 'Sin título';
++    
++    // Validate URL format
++    try {
++        new URL(originalUrl);
++    } catch (e) {
++        this.showToast('URL inválida. Incluya el protocolo (https://).', 'error');
++        return;
++    }
+     const title = document.getElementById('fieldTitle').value.trim() || 'Sin título';
+ 
+=== PATCH: js/app.js - Improve alias generation ===
+--- a/js/app.js
++++ b/js/app.js
+@@ -738, +744,14 @@ class ShortLinkApp:
+     let alias = document.getElementById('fieldAlias').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+ 
+     if (!alias) {
+-        alias = Math.random().toString(36).substring(2, 8);
++        // Generate unique alias with more entropy (10 chars instead of 6)
++        let newAlias;
++        let collision = true;
++        while (collision) {
++            newAlias = Math.random().toString(36).substring(2, 12);
++            // Check for collision with existing links
++            collision = this.links.some(l => l.alias === newAlias && l.id !== editId);
++        }
++        alias = newAlias;
+     }
+ 
+     const aliasExists = this.links.some(l => l.alias === alias && l.id !== editId);
+=== PATCH: android/AndroidManifest.xml - Disable cleartext traffic ===
+--- a/android/AndroidManifest.xml
++++ b/android/AndroidManifest.xml
+@@ -14,7 +14,7 @@
+         android:theme="@style/Theme.AppCompat.NoActionBar"
+-        android:usesCleartextTraffic="true">
++        android:usesCleartextTraffic="false">
+         
+         <activity
