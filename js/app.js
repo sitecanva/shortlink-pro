@@ -650,12 +650,21 @@ class ShortLinkApp {
 
     async getVisitorIp() {
         try {
-            const res = await fetch('https://api.ipify.org?format=json');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+            const res = await fetch('https://api.ipify.org?format=json', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) throw new Error('IP lookup failed');
             const data = await res.json();
-            return data.ip || '186.92.14.82';
+            return data.ip || '127.0.0.1';
         } catch (e) {
-            const sampleIps = ['190.204.88.14', '186.102.45.12', '201.244.5.89', '181.65.12.44'];
-            return sampleIps[Math.floor(Math.random() * sampleIps.length)];
+            console.warn('Could not fetch visitor IP:', e.message);
+            // Return a placeholder indicating IP unavailable rather than a random fake IP
+            return '0.0.0.0';
         }
     }
 
